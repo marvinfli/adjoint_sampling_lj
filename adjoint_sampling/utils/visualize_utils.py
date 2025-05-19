@@ -10,6 +10,8 @@ from rdkit import Chem
 
 from rdkit.Chem import Draw, rdDetermineBonds
 
+from adjoint_sampling.utils.eval_utils import safe_remove_hydrogens
+
 
 def fig2img(fig):
     """Convert a Matplotlib figure to a PIL Image and return it"""
@@ -118,7 +120,7 @@ def to_mol(positions, atom_types):
     rdDetermineBonds.DetermineConnectivity(mol)
     try:
         rdDetermineBonds.DetermineBondOrders(mol, charge=0)
-        cm = Chem.RemoveHs(mol)
+        cm = safe_remove_hydrogens(mol)
         smi = Chem.MolToSmiles(cm)
         return mol, smi
     except:  # noqa: E722

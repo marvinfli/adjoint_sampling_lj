@@ -1,5 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -94,6 +95,13 @@ def get_atomic_graph(atom_list, positions, z_table):
         indices, num_classes=len(z_table)
     )
 
+    if isinstance(positions, torch.Tensor):
+        positions = positions.to(dtype=torch.get_default_dtype())
+    elif isinstance(positions, np.ndarray):
+        positions = torch.from_numpy(positions).to(dtype=torch.get_default_dtype())
+    else:
+        positions = torch.tensor(positions, dtype=torch.get_default_dtype())
+
     return Data(
         cell=torch.eye(3) * 50.0,  # was 25.0 by default in MACE
         charges=torch.zeros(n_atoms),
@@ -105,7 +113,7 @@ def get_atomic_graph(atom_list, positions, z_table):
         forces_weight=0.0,
         head=0,
         node_attrs=one_hot_atomic_species.to(torch.get_default_dtype()),
-        positions=torch.tensor(positions, dtype=torch.get_default_dtype()),
+        positions=positions,
         shifts=torch.zeros(n_edges, 3),
         stress=torch.zeros(1, 3, 3),
         stress_weight=0.0,

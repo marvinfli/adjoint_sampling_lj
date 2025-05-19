@@ -29,10 +29,12 @@ from adjoint_sampling.energies.fairchem_energy import (
 from adjoint_sampling.sampletorsion.randomtorsion import get_random_torsions
 from adjoint_sampling.utils.eval_utils import (
     calc_performance_stats,
-    calc_rmsd,
+    # calc_rmsd,
+    calc_rmsd_parallel,
     generate_conformers,
     read_rdkit_mols,
     read_xyz_files,
+    safe_remove_hydrogens,
     save_metrics,
     setup_device,
     visualize_conformers,
@@ -78,11 +80,6 @@ def parse_args():
     )
     parser.add_argument(
         "--save_path", type=str, required=True, help="Path to save the results"
-    )
-    parser.add_argument(
-        "--only_alignmol",
-        action="store_true",
-        help="Use only AlignMol instead of GetBestRMS",
     )
     parser.add_argument("--num_integration_steps", type=int, default=1000)
     parser.add_argument("--discretization", type=str, default="uniform")
@@ -349,22 +346,22 @@ def main():
 
         # calculate rmsd
         correct_mols = []
-        for i, mol in enumerate(gen_mols):
-            smi1 = Chem.MolToSmiles(
-                Chem.RemoveHs(mol), isomericSmiles=False, canonical=True
-            )
-            smi2 = Chem.MolToSmiles(
-                Chem.RemoveHs(mol), isomericSmiles=True, canonical=True
-            )
+        for _, mol in enumerate(gen_mols):
+            mol_noHs = safe_remove_hydrogens(mol)
+            smi1 = Chem.MolToSmiles(mol_noHs, isomericSmiles=False, canonical=True)
+            smi2 = Chem.MolToSmiles(mol_noHs, isomericSmiles=True, canonical=True)
             if smi1 == smiles or smi2 == smiles:
                 correct_mols.append(mol)
 
-        rmsd_array_gen = calc_rmsd(gen_mols, ref_mols, args.only_alignmol)
+        # rmsd_array_gen_ = calc_rmsd(gen_mols, ref_mols)
+        rmsd_array_gen = calc_rmsd_parallel(gen_mols, ref_mols)
+        # assert np.allclose(rmsd_array_gen, rmsd_array_gen_)
         stats_gen_ = calc_performance_stats(
             rmsd_array_gen, threshold_ranges, "gen_mols vs ref_mols"
         )
-
-        rmsd_array_crr = calc_rmsd(correct_mols, ref_mols, args.only_alignmol)
+        # rmsd_array_crr_ = calc_rmsd(correct_mols, ref_mols)
+        rmsd_array_crr = calc_rmsd_parallel(correct_mols, ref_mols)
+        # assert np.allclose(rmsd_array_crr, rmsd_array_crr_)
         stats_crr_ = calc_performance_stats(
             rmsd_array_crr, threshold_ranges, "correct_mols vs ref_mols"
         )

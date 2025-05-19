@@ -123,7 +123,6 @@ def main(cfg):
             controller = torch.nn.parallel.DistributedDataParallel(
                 controller, device_ids=[cfg.gpu], find_unused_parameters=True
             )
-            # controller_without_ddp = controller.module
 
         lr_schedule = None
         optimizer = torch.optim.Adam(list(sde.parameters()), lr=cfg.lr)
@@ -148,16 +147,6 @@ def main(cfg):
             learn_torsions=cfg.learn_torsions,
             relax=cfg.dataset.relax,
         )
-        # eval_sample_loader = torch_geometric.dataloader.DataLoader(
-        #     dataset=eval_sample_dataset,
-        #     batch_size=cfg.batch_size,
-        #     sampler=torch.utils.data.DistributedSampler(
-        #         eval_sample_dataset,
-        #         num_replicas=world_size,
-        #         rank=global_rank,
-        #         shuffle=False,
-        #     ),
-        # )
         # eval only on main process
         eval_sample_loader = torch_geometric.loader.DataLoader(
             dataset=eval_sample_dataset,
@@ -180,17 +169,6 @@ def main(cfg):
             ),
         )
 
-        # train_sample_dataset = AtomicDataset(train_sample_dataset)
-        # train_sample_loader = torch.utils.data.DataLoader(
-        #     dataset=train_sample_dataset,
-        #     batch_size=10,
-        #     sampler=torch.utils.data.DistributedSampler(
-        #         train_sample_dataset,
-        #         num_replicas=world_size,
-        #         rank=global_rank,
-        #         shuffle=True,
-        #     ),
-        # )
         n_init_batches = int(cfg.num_init_samples // cfg.num_samples_per_epoch)
         n_batches_per_epoch = int(cfg.num_samples_per_epoch // cfg.batch_size)
         if cfg.learn_torsions:
@@ -199,7 +177,6 @@ def main(cfg):
             clipper = Clipper(cfg.clip_scores, cfg.max_score_norm)
 
         print(f"Starting from {cfg.start_epoch}/{cfg.num_epochs} epochs")
-        # start_time = time.time()
         pbar = tqdm(range(start_epoch, cfg.num_epochs))
         for epoch in pbar:
             if (
@@ -316,9 +293,6 @@ def main(cfg):
                         # Log exception but don't stop training.
                         print(traceback.format_exc())
                         print(traceback.format_exc(), file=sys.stderr)
-
-        # total_time = time.time() - start_time
-        # total_time_str = str(datetime.timedelta(seconds=int(total_time)))
 
     except Exception as e:
         # This way we have the full traceback in the log.  otherwise Hydra

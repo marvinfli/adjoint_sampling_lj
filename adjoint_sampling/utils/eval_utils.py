@@ -2,6 +2,8 @@
 
 import csv
 import io
+import os
+from itertools import product
 from pathlib import Path
 from typing import Union
 
@@ -15,6 +17,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw, rdDetermineBonds
 from tqdm import tqdm
 
+from adjoint_sampling.components.ourjoblib import joblib_map
 from adjoint_sampling.components.sde import (
     euler_maruyama_step,
     quadratic_linear_discretization,
@@ -55,6 +58,20 @@ def setup_device(args):
         )
     print(f"Using device: {device}")
     return device
+
+
+def get_mol_from_mol_block(mol_block: str) -> Chem.Mol:
+    rdkit_mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+    if rdkit_mol is None:
+        rdkit_mol = Chem.MolFromMolBlock(mol_block, removeHs=False, sanitize=False)
+        if rdkit_mol is not None:
+            try:
+                Chem.SanitizeMol(
+                    rdkit_mol, sanitizeOps=Chem.SANITIZE_ALL ^ Chem.SANITIZE_PROPERTIES
+                )
+            except Exception as e:
+                print(f"Sanitization failed: {str(e)}")
+    return rdkit_mol
 
 
 def get_networkx_graph(mol: Chem.Mol) -> tuple[nx.Graph, dict[int, int]]:
@@ -136,7 +153,7 @@ def read_rdkit_mols(
             obmol.PerceiveBondOrders()  # Perceive bond orders
             obmol.AssignSpinMultiplicity(True)  # Clean up radical centers
             mol_block = obConversion.WriteString(obmol)
-            rdkit_mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+            rdkit_mol = get_mol_from_mol_block(mol_block)
             mol_list.append(rdkit_mol)
         else:
             mol_list.append(new_mol)
@@ -239,16 +256,16 @@ def read_xyz_files(xyz_path: Union[Path, str]) -> list[Chem.Mol]:
                 atom_list.append(atom_number)
 
             # Create OpenBabel molecule
-            mol = ob.OBMol()
-            obConversion.ReadString(mol, xyz_block)
+            obmol = ob.OBMol()
+            obConversion.ReadString(obmol, xyz_block)
 
             # Perceive bonds
-            mol.ConnectTheDots()  # Connect atoms based on distance
-            mol.PerceiveBondOrders()  # Perceive bond orders
+            obmol.ConnectTheDots()  # Connect atoms based on distance
+            obmol.PerceiveBondOrders()  # Perceive bond orders
 
             # Convert to RDKit molecule
-            mol_block = obConversion.WriteString(mol)
-            rdkit_mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+            mol_block = obConversion.WriteString(obmol)
+            rdkit_mol = get_mol_from_mol_block(mol_block)
 
             if rdkit_mol is not None:
                 ref_mols.append(rdkit_mol)
@@ -365,7 +382,7 @@ def generate_conformers(
 
             # Convert to RDKit molecule
             mol_block = obConversion.WriteString(obmol)
-            rdkit_mol = Chem.MolFromMolBlock(mol_block, removeHs=False)
+            rdkit_mol = get_mol_from_mol_block(mol_block)
 
             if rdkit_mol is not None:
                 gen_mols.append(rdkit_mol)
@@ -468,29 +485,76 @@ def xyz_to_mol(block):
     return mol
 
 
-def calc_rmsd(gen_mols, ref_mols, only_alignmol=False):
+def safe_remove_hydrogens(mol: Chem.Mol) -> Chem.Mol:
+    try:
+        return Chem.RemoveAllHs(mol)
+    except:  # noqa: E722
+        return Chem.RemoveAllHs(mol, sanitize=False)
+
+
+def calc_rmsd_pairwise(gen_mol: Chem.Mol, ref_mol: Chem.Mol) -> np.ndarray:
+    gen_mol_noH = safe_remove_hydrogens(gen_mol)
+    ref_mol_noH = safe_remove_hydrogens(ref_mol)
+    # only if there are the same number of atoms
+    if ref_mol_noH.GetNumAtoms() == gen_mol_noH.GetNumAtoms():
+        try:
+            # automatically find pairs
+            rms_dist = AllChem.GetBestRMS(gen_mol_noH, ref_mol_noH)
+            return rms_dist
+        except RuntimeError:
+            pass
+
+        try:
+            # use our pairs
+            maps = get_map_if_atoms_same_and_undirected_isomorphism(
+                gen_mol_noH, ref_mol_noH
+            )
+            rms_dist = AllChem.GetBestRMS(gen_mol_noH, ref_mol_noH, map=maps)
+            return rms_dist
+        except RuntimeError:
+            pass
+    return np.nan
+
+
+def calc_rmsd_parallel(
+    gen_mols: list[Chem.Mol], ref_mols: list[Chem.Mol]
+) -> np.ndarray:
+    gen_mols = list(map(safe_remove_hydrogens, gen_mols))
+    ref_mols = list(map(safe_remove_hydrogens, ref_mols))
+    work = product(ref_mols, gen_mols)
+    rmsds = joblib_map(
+        lambda x: calc_rmsd_pairwise(*x),
+        work,
+        n_jobs=int(os.environ["SLURM_CPUS_ON_NODE"])
+        if os.environ.get("SLURM_CPUS_ON_NODE", False)
+        else 1,
+        inner_max_num_threads=1,
+        desc="computing rmsd",
+        total=len(ref_mols) * len(gen_mols),
+    )
+    return np.asarray(rmsds).reshape(len(ref_mols), len(gen_mols))
+
+
+def calc_rmsd(gen_mols: list[Chem.Mol], ref_mols: list[Chem.Mol]) -> np.ndarray:
     rmsd_array = np.full((len(ref_mols), len(gen_mols)), np.inf)
     for i, ref_mol in enumerate(tqdm(ref_mols)):
         for j, gen_mol in enumerate(gen_mols):
-            ref_mol_noH = Chem.RemoveHs(ref_mol)
-            gen_mol_noH = Chem.RemoveHs(gen_mol)
+            ref_mol_noH = safe_remove_hydrogens(ref_mol)
+            gen_mol_noH = safe_remove_hydrogens(gen_mol)
 
             # only if there are the same number of atoms
             if ref_mol_noH.GetNumAtoms() == gen_mol_noH.GetNumAtoms():
                 try:
-                    if only_alignmol:
-                        rms_dist = AllChem.AlignMol(gen_mol_noH, ref_mol_noH)
-                    else:
-                        try:
-                            # automatically find pairs
-                            rms_dist = AllChem.GetBestRMS(gen_mol_noH, ref_mol_noH)
-                        except RuntimeError:
-                            maps = get_map_if_atoms_same_and_undirected_isomorphism(
-                                gen_mol_noH, ref_mol_noH
-                            )
-                            rms_dist = AllChem.GetBestRMS(
-                                gen_mol_noH, ref_mol_noH, map=maps
-                            )
+                    try:
+                        # automatically find pairs
+                        rms_dist = AllChem.GetBestRMS(gen_mol_noH, ref_mol_noH)
+                    except RuntimeError:
+                        maps = get_map_if_atoms_same_and_undirected_isomorphism(
+                            gen_mol_noH, ref_mol_noH
+                        )
+                        rms_dist = AllChem.GetBestRMS(
+                            gen_mol_noH, ref_mol_noH, map=maps
+                        )
                     rmsd_array[i, j] = rms_dist
                 except Exception:
                     rmsd_array[i, j] = np.nan

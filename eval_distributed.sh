@@ -25,7 +25,7 @@ RESULTS_DIR=""
 
 # The parameter `num_ranks` lets the program identify which slice of the data to operate on.
 
-submit_array "spice_evaluation" "0-49" "python eval.py \
+submit_array "spice_evaluation" "0-79" "python eval.py \
 --test_mols data/spice_test.txt \
 --true_confs data/spice_test_conformers \
 --save_path ${RESULTS_DIR}/spice \
@@ -33,9 +33,9 @@ submit_array "spice_evaluation" "0-49" "python eval.py \
 --batch_size 128 \
 --max_n_refs 512 \
 --relax \
---num_ranks 50"
+--num_ranks 80"
 
-submit_array "drugs_evaluation" "0-49" "python eval.py \
+submit_array "drugs_evaluation" "0-79" "python eval.py \
 --test_mols data/drugs_test.txt \
 --true_confs data/drugs_test_conformers \
 --save_path ${RESULTS_DIR}/drugs \
@@ -43,4 +43,4 @@ submit_array "drugs_evaluation" "0-49" "python eval.py \
 --batch_size 128 \
 --max_n_refs 512 \
 --relax \
---num_ranks 50"
+--num_ranks 80"
