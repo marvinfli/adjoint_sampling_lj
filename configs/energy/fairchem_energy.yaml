@@ -1,2 +1,5 @@
 _target_: adjoint_sampling.energies.fairchem_energy.FairChemEnergy
-_partial_: True
+tau: ${tau}  # Temperature parameter 
+alpha: ${alpha}  # bond structure regularizing energy
+device: ${device}  # Device to run training on
+# _partial_: True

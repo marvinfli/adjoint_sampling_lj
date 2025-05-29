@@ -1,0 +1,7 @@
+_target_: adjoint_sampling.components.datasets.get_homogeneous_dataset
+# _partial_: True
+smiles: ${eval_smiles}
+# energy_model will be passed in from the training script
+duplicate: ${num_eval_samples}
+learn_torsions: ${learn_torsions}
+relax: ${dataset.relax} 

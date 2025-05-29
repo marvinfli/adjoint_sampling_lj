@@ -1,0 +1,146 @@
+defaults:
+  # - controller: egnn # neural network
+  - energy: lennardjones_energy
+  - noise_schedule: geometric
+  - eval_dataset: identical_particles_eval
+  - _self_
+  # - override hydra/launcher: submitit_slurm
+
+num_particles: 2
+spatial_dim: 3 # space dimension
+# dof: 1 # number of edges = num_particles * (num_particles - 1) / 2
+
+# Basic settings
+seed: 0                  # Random seed for reproducibility
+device: cuda             # Device to run training on (cuda or cpu)
+learn_torsions: false    # If true, model in torsion space; if false, model in Cartesian coordinates
+
+# Training parameters
+num_batches_per_epoch: 100  # Number of batches to process in each epoch
+
+# Sample generation settings
+num_init_samples: 1024   # Number of initial samples to generate for buffer
+num_samples_per_epoch: 512   # Number of new samples to generate per epoch
+
+# Training duration settings
+start_epoch: 0          # First epoch to start training from
+num_epochs: 1000        # Total number of epochs to train
+batch_size: 256         # Batch size for training
+
+# Sampling settings
+train_nfe: 500          # Number of function evaluations for training samples
+eval_nfe: 500           # Number of function evaluations for evaluation samples
+num_eval_samples: 1024  # Number of samples to use for evaluation
+
+# Optimizer settings
+lr: 1e-4                # Learning rate
+lr_schedule: null       # Learning rate schedule (null = constant learning rate)
+ 
+# Buffer settings
+buffer_size: 20         # Size of the experience replay buffer (in batches)
+
+# Energy cutoffs for valid conformers
+min_energy: -2085       # Minimum energy threshold for valid conformers
+max_energy: -2065       # Maximum energy threshold for valid conformers
+
+# Visualization and evaluation settings
+visualize_conformations: True   # Whether to visualize conformations during evaluation
+compute_coverage: False         # Whether to compute conformational coverage metrics
+
+# Energy model parameters
+tau : 1e-3              # Temperature parameter for the energy model
+alpha : 1e3             # weight of bond_structure_regularizer energy
+
+# Score clipping parameters to prevent numerical instability
+clip_scores: True       # Whether to clip score values
+max_score_norm: 50.0    # Maximum allowed norm for scores when clipping
+
+# Training stability parameters
+grad_clip: 1e20         # Gradient clipping threshold (very high = effectively no clipping)
+
+# Evaluation frequency
+eval_freq: 50           # Evaluate model every this many epochs
+
+# Input data settings
+conformers_file: null   # Optional file with precomputed conformers
+duplicates: 1           # Number of times to duplicate each molecule in dataset
+
+dataset:
+  _target_: adjoint_sampling.components.identicalparticles_dataset.IdenticalParticlesDataset  # Dataset class
+  num_particles: ${num_particles}  # Number of particles from above
+  spatial_dim: ${spatial_dim}  # Dimension from above
+  num_samples: 100  # Number of samples in dataset
+  duplicate: 1  # Number of times to duplicate each sample
+
+controller:
+  _target_: adjoint_sampling.components.controllers.EGNN_dynamics
+  n_layers: 3
+  n_atoms: 100 
+  uniform: False # if true, all particles and edges are the same
+  hidden_nf: 32
+  agg: "sum"
+  spatial_dim: 3
+
+# custom 
+save_checkpoints: False
+
+# ===== Distributed training settings =====
+shared_dir: ${oc.env:PROJECTROOT}  # Shared directory for distributed training
+# Data duplication strategy:
+# - When True, each GPU sees different data (more diverse training)
+# - When False, each GPU sees copies of the same data (potentially better convergence)
+amortized: True
+
+# ===== Training strategy settings =====
+pretrain_epochs: 0      # Number of epochs to use pretraining (Bridge Matching)
+
+# Loss function settings
+scaled_BM_loss: True    # Whether to use scaled Bridge Matching loss
+BM_loss_weight: 0.0     # Weight of Bridge Matching loss (0.0 = use only Adjoint Matching loss)
+BM_only_pretrain: False # If True, use only Bridge Matching loss during pretraining
+use_AM_SDE: True        # Whether to use Adjoint Matching SDE formulation
+
+# SDE integration time discretization
+discretization_scheme: uniform 
+
+# Ablation study parameters
+no_pbase: False         # Whether to remove position-based terms (for ablation studies)
+
+# Learning rate warmup
+warmup_period: 0        # Number of epochs for lr warmup (0 = no warmup)
+
+# Checkpoint loading
+init_model: null        # Path to initial model to load (for transfer learning or continuing training)
+resume_checkpoint: False # Whether to resume training from a checkpoint
+
+# Where to save checkpoints
+checkpoint_dir: None # ${oc.env:PROJECTROOT}/checkpoints
+
+# ===== Hydra configuration =====
+# Controls where output files and logs are stored
+hydra:
+  run:
+    dir: ${oc.env:PROJECTROOT}/results/local/${now:%Y.%m.%d}/${now:%H%M%S}
+  sweep:
+    dir: ${oc.env:PROJECTROOT}/results/${now:%Y.%m.%d}/${now:%H%M%S}
+    subdir: ${hydra.job.num}
+  # launcher:
+  #   max_num_timeout: 100000
+  #   timeout_min: 4319       # Maximum runtime in minutes (4319=3 days)
+  #   # account: flows          # SLURM account to use
+  #   # qos: flows_high         # Quality of service setting
+  #   mem_gb: 64              # Memory per node in GB
+  #   nodes: 1                # Number of nodes
+  #   gpus_per_node: 1        # Number of GPUs per node
+  #   tasks_per_node: ${hydra.launcher.gpus_per_node}  # One task per GPU
+
+use_wandb: True
+wandb_project: adjoint_sampling
+wandb_name: ${hydra:job.name}
+
+# variables we can access in our code
+# job_name: 'results'
+# job_name: ${hydra:job.name}
+config_name: ${hydra:job.config_name}
+# Stores the command line arguments overrides
+override_dirname: ${hydra:job.override_dirname}

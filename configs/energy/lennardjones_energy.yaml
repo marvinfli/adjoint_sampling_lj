@@ -1,0 +1,7 @@
+_target_: adjoint_sampling.energies.lennardjones_energy.LennardJonesEnergy  # Energy model class
+tau: ${tau}  # Temperature parameter 
+alpha: ${alpha}  # bond structure regularizing energy
+device: ${device}  # Device to run training on
+num_particles: ${num_particles}  # Number of particles in the system
+use_oscillator: False
+oscillator_scale: 0.25

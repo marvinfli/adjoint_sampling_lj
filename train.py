@@ -19,6 +19,7 @@ import torch_geometric
 from adjoint_sampling.components.clipper import Clipper, Clipper1d
 
 from adjoint_sampling.components.datasets import get_homogeneous_dataset
+from adjoint_sampling.components.identicalparticles_dataset import get_identical_particles_dataset, get_homogeneous_custom_dataset
 from adjoint_sampling.components.sample_buffer import BatchBuffer
 from adjoint_sampling.components.sampler import (
     populate_buffer_from_loader,
@@ -33,6 +34,7 @@ from adjoint_sampling.train_loop import train_one_epoch
 
 from omegaconf import OmegaConf
 from tqdm import tqdm
+import wandb
 
 
 cudnn.benchmark = True
@@ -76,9 +78,7 @@ def main(cfg):
 
         print("Initializing model")
         noise_schedule = hydra.utils.instantiate(cfg.noise_schedule)
-        energy_model = hydra.utils.instantiate(cfg.energy)(
-            tau=cfg.tau, alpha=cfg.alpha, device=device
-        )
+        energy_model = hydra.utils.instantiate(cfg.energy)
 
         # THIS MUST BE DONE AFTER LOADING THE ENERGY MODEL!!
         if cfg.learn_torsions:
@@ -140,12 +140,17 @@ def main(cfg):
         world_size = distributed_mode.get_world_size()
         global_rank = distributed_mode.get_rank()
 
-        eval_sample_dataset = get_homogeneous_dataset(
-            cfg.eval_smiles,
-            energy_model,
-            duplicate=cfg.num_eval_samples,
-            learn_torsions=cfg.learn_torsions,
-            relax=cfg.dataset.relax,
+        # eval_sample_dataset = get_homogeneous_dataset(
+        #     cfg.eval_smiles,
+        #     energy_model,
+        #     duplicate=cfg.num_eval_samples,
+        #     learn_torsions=cfg.learn_torsions,
+        #     relax=cfg.dataset.relax,
+        # )
+        eval_sample_dataset = hydra.utils.instantiate(
+            cfg.eval_dataset,
+            energy_model=energy_model,
+            _recursive_=False  # Important to prevent re-instantiating energy_model if it's also a config
         )
         # eval only on main process
         eval_sample_loader = torch_geometric.loader.DataLoader(
