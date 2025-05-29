@@ -2,13 +2,13 @@
 
 import torch
 from torchmetrics.aggregation import MeanMetric
+import wandb
 
 from adjoint_sampling.components.soc import (
     adjoint_score_target,
     adjoint_score_target_torsion,
 )
 from adjoint_sampling.sampletorsion.torsion import check_torsions
-
 from adjoint_sampling.utils.data_utils import cycle
 
 
@@ -27,6 +27,7 @@ def train_one_epoch(
     lr_schedule,
     device,
     cfg,
+    global_step,
     pretrain_mode=False,
 ):
     epoch_loss = 0
@@ -119,12 +120,20 @@ def train_one_epoch(
             loss = adjoint_loss + cfg.BM_loss_weight * bm_loss
 
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(controller.parameters(), cfg.grad_clip)
+        grad_norm = torch.nn.utils.clip_grad_norm_(controller.parameters(), cfg.grad_clip)
         optimizer.step()
         epoch_loss.update(loss.item())
 
         with warmup_scheduler.dampening():
             if lr_schedule:
                 lr_schedule.step()
+                
+        if wandb.run is not None:
+            wandb.log({
+                "loss": loss.item(),
+                "adj_loss": adjoint_loss.item(),
+                "bm_loss": bm_loss.item(),
+                "grad_norm": grad_norm.item(),
+            }, step=global_step)
 
-    return {"loss": float(epoch_loss.compute().detach().cpu())}
+    return {"loss": float(epoch_loss.compute().detach().cpu())}, global_step

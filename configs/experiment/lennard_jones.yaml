@@ -1,9 +1,11 @@
+# @package _global_
+
 defaults:
-  # - controller: egnn # neural network
-  - energy: lennardjones_energy
-  - noise_schedule: geometric
-  - eval_dataset: identical_particles_eval
-  - _self_
+  - override /noise_schedule: geometric
+  - override /energy: lennardjones_energy
+  - override /dataset: identical_particles_dataset
+  - override /eval_dataset: identical_particles_eval
+  # - _self_
   # - override hydra/launcher: submitit_slurm
 
 num_particles: 2
@@ -35,7 +37,7 @@ num_eval_samples: 1024  # Number of samples to use for evaluation
 # Optimizer settings
 lr: 1e-4                # Learning rate
 lr_schedule: null       # Learning rate schedule (null = constant learning rate)
- 
+  
 # Buffer settings
 buffer_size: 20         # Size of the experience replay buffer (in batches)
 
@@ -65,13 +67,6 @@ eval_freq: 50           # Evaluate model every this many epochs
 conformers_file: null   # Optional file with precomputed conformers
 duplicates: 1           # Number of times to duplicate each molecule in dataset
 
-dataset:
-  _target_: adjoint_sampling.components.identicalparticles_dataset.IdenticalParticlesDataset  # Dataset class
-  num_particles: ${num_particles}  # Number of particles from above
-  spatial_dim: ${spatial_dim}  # Dimension from above
-  num_samples: 100  # Number of samples in dataset
-  duplicate: 1  # Number of times to duplicate each sample
-
 controller:
   _target_: adjoint_sampling.components.controllers.EGNN_dynamics
   n_layers: 3
@@ -79,7 +74,7 @@ controller:
   uniform: False # if true, all particles and edges are the same
   hidden_nf: 32
   agg: "sum"
-  spatial_dim: 3
+  # spatial_dim: 3
 
 # custom 
 save_checkpoints: False
@@ -115,24 +110,6 @@ resume_checkpoint: False # Whether to resume training from a checkpoint
 
 # Where to save checkpoints
 checkpoint_dir: None # ${oc.env:PROJECTROOT}/checkpoints
-
-# ===== Hydra configuration =====
-# Controls where output files and logs are stored
-hydra:
-  run:
-    dir: ${oc.env:PROJECTROOT}/results/local/${now:%Y.%m.%d}/${now:%H%M%S}
-  sweep:
-    dir: ${oc.env:PROJECTROOT}/results/${now:%Y.%m.%d}/${now:%H%M%S}
-    subdir: ${hydra.job.num}
-  # launcher:
-  #   max_num_timeout: 100000
-  #   timeout_min: 4319       # Maximum runtime in minutes (4319=3 days)
-  #   # account: flows          # SLURM account to use
-  #   # qos: flows_high         # Quality of service setting
-  #   mem_gb: 64              # Memory per node in GB
-  #   nodes: 1                # Number of nodes
-  #   gpus_per_node: 1        # Number of GPUs per node
-  #   tasks_per_node: ${hydra.launcher.gpus_per_node}  # One task per GPU
 
 use_wandb: True
 wandb_project: adjoint_sampling

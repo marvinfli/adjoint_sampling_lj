@@ -1,4 +1,4 @@
-name: adjoint_sampling
+name: adjoint_sampling_lj
 channels:
   - nvidia
   - pytorch
@@ -38,6 +38,7 @@ dependencies:
     - e3nn==0.5.1
     - fairchem-core==1.10.0
     - huggingface_hub>=0.27.1
+    - wandb
     - -e .
     # from here below, we use find-links
     - --find-links https://data.pyg.org/whl/torch-2.4.0+cu121.html

@@ -68,6 +68,11 @@ no_pbase: False
 warmup_period: 0
 
 init_model: null
+save_checkpoints: False
+
+use_wandb: True
+wandb_project: adjoint_sampling
+wandb_name: ${hydra:job.name}
 
 hydra:
   run:

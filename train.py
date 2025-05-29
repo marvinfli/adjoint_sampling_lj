@@ -19,7 +19,7 @@ import torch_geometric
 from adjoint_sampling.components.clipper import Clipper, Clipper1d
 
 from adjoint_sampling.components.datasets import get_homogeneous_dataset
-from adjoint_sampling.components.identicalparticles_dataset import get_identical_particles_dataset, get_homogeneous_custom_dataset
+from adjoint_sampling.components.identicalparticles_dataset import get_identical_particles_dataset
 from adjoint_sampling.components.sample_buffer import BatchBuffer
 from adjoint_sampling.components.sampler import (
     populate_buffer_from_loader,
@@ -42,6 +42,9 @@ cudnn.benchmark = True
 
 @hydra.main(config_path="configs", config_name="train.yaml", version_base="1.1")
 def main(cfg):
+    if cfg.use_wandb:
+        wandb.init(project=cfg.wandb_project, name=cfg.wandb_name)
+    
     try:
 
         print("Found {} CUDA devices.".format(torch.cuda.device_count()))
@@ -158,9 +161,11 @@ def main(cfg):
             batch_size=cfg.batch_size,
         )
 
-        train_sample_dataset = hydra.utils.instantiate(cfg.dataset)(
+        train_sample_dataset = hydra.utils.instantiate(
+            cfg.dataset,
             energy_model=energy_model,
             duplicate=(1 if cfg.amortized else world_size),
+            _recursive_=False
         )
 
         train_sample_loader = torch_geometric.loader.DataLoader(
@@ -180,6 +185,8 @@ def main(cfg):
             clipper = Clipper1d(cfg.clip_scores, cfg.max_score_norm)
         else:
             clipper = Clipper(cfg.clip_scores, cfg.max_score_norm)
+
+        global_step = 0
 
         print(f"Starting from {cfg.start_epoch}/{cfg.num_epochs} epochs")
         pbar = tqdm(range(start_epoch, cfg.num_epochs))
@@ -243,7 +250,7 @@ def main(cfg):
                     )
             train_dataloader = buffer.get_data_loader(cfg.num_batches_per_epoch)
 
-            train_dict = train_one_epoch(
+            train_dict, global_step = train_one_epoch(
                 controller,
                 noise_schedule,
                 clipper,
@@ -254,6 +261,7 @@ def main(cfg):
                 device,
                 cfg,
                 pretrain_mode=(epoch < cfg.pretrain_epochs),
+                global_step=global_step,
             )
             if epoch % cfg.eval_freq == 0 or epoch == cfg.num_epochs - 1:
                 if distributed_mode.is_main_process():
@@ -263,27 +271,29 @@ def main(cfg):
                             energy_model,
                             eval_sample_loader,
                             noise_schedule,
-                            energy_model.atomic_numbers,
-                            global_rank,
-                            device,
-                            cfg,
+                            atomic_number_table=energy_model.atomic_numbers,
+                            rank=global_rank,
+                            device=device,
+                            cfg=cfg,
                         )
                         eval_dict["energy_vis"].save("test_im.png")
-                        print("saving checkpoint ... ")
-                        if cfg.distributed:
-                            state = {
-                                "controller_state_dict": controller.module.state_dict(),
-                                "optimizer_state_dict": optimizer.state_dict(),
-                                "epoch": epoch,
-                            }
-                        else:
-                            state = {
-                                "controller_state_dict": controller.state_dict(),
-                                "optimizer_state_dict": optimizer.state_dict(),
-                                "epoch": epoch,
-                            }
-                        torch.save(state, "checkpoints/checkpoint_{}.pt".format(epoch))
-                        torch.save(state, "checkpoints/checkpoint_latest.pt")
+
+                        if cfg.save_checkpoints:
+                            print("saving checkpoint ... ")
+                            if cfg.distributed:
+                                state = {
+                                    "controller_state_dict": controller.module.state_dict(),
+                                    "optimizer_state_dict": optimizer.state_dict(),
+                                    "epoch": epoch,
+                                }
+                            else:
+                                state = {
+                                    "controller_state_dict": controller.state_dict(),
+                                    "optimizer_state_dict": optimizer.state_dict(),
+                                    "epoch": epoch,
+                                }
+                            torch.save(state, "checkpoints/checkpoint_{}.pt".format(epoch))
+                            torch.save(state, "checkpoints/checkpoint_latest.pt")
                         mode = (
                             "pretrain"
                             if epoch < cfg.pretrain_epochs

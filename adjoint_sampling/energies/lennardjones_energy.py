@@ -62,6 +62,10 @@ class LennardJonesEnergy(torch.nn.Module):
         self.plotting_bounds_r = [0.1, 5] # [min, max] for relative distance
         self.plotting_bounds_energy = [-1.5, 2.0] # [min, max] for energy
         
+        # from fairchem_energy
+        # self.atomic_numbers = torch.arange(100)
+        self.atomic_numbers = torch.ones(num_particles, dtype=torch.long)
+        
         # vmapped functions
         self.energy_vmapped = torch.vmap(self._energy_vmap)
         

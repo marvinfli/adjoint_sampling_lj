@@ -109,6 +109,7 @@ def evaluation(
 
     else:
         conformer_outputs = None
+        
     Im = get_dataset_fig(
         states[0], outputs[0]["energy"], cfg, outputs=conformer_outputs
     )
@@ -120,15 +121,16 @@ def evaluation(
         conformers_path = to_absolute_path(cfg.conformers_file)
         with open("soc.txt", "a+") as file:
             file.write(f"{soc_loss}\n")
+        if cfg.compute_coverage:
+            cr, cp, threshold_range = eval_batch(
+                states, energy_model, device, conformers_path, cfg.eval_smiles
+            )
+            cr = cr.tolist()
+            with open("recall.csv", "a+", newline="") as file:
+                write = csv.writer(file, delimiter=";")
+                write.writerow(cr)
     else:
-        raise FileNotFoundError("we must have a cfg.conformers_file")
+        # raise FileNotFoundError("we must have a cfg.conformers_file")
+        print("Warning: No cfg.conformers_file")
 
-    if cfg.compute_coverage:
-        cr, cp, threshold_range = eval_batch(
-            states, energy_model, device, conformers_path, cfg.eval_smiles
-        )
-        cr = cr.tolist()
-        with open("recall.csv", "a+", newline="") as file:
-            write = csv.writer(file, delimiter=";")
-            write.writerow(cr)
     return {"soc_loss": soc_loss, "energy_vis": Im}

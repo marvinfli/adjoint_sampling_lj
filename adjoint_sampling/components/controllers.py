@@ -71,11 +71,13 @@ class EGNN_dynamics(nn.Module):
         n_layers=4,
         agg="sum",
         uniform=False,
+        num_bond_classes=2,
     ):
         super().__init__()
         in_node_nf = n_atoms + 1 if not uniform else 1
         in_edge_nf = 3 if not uniform else 1
         self.uniform = uniform
+        self.num_bond_classes = num_bond_classes
         self.egnn = EGNN(
             in_node_nf=in_node_nf,
             in_edge_nf=in_edge_nf,
@@ -98,7 +100,7 @@ class EGNN_dynamics(nn.Module):
         if not self.uniform:
             h_atom_types = batch["node_attrs"]  # .double()
             h = torch.cat([h_atom_types, h], dim=-1)  # .double()
-            bond_one_hot = torch.nn.functional.one_hot(batch["edge_attrs"][:, 1].long())
+            bond_one_hot = torch.nn.functional.one_hot(batch["edge_attrs"][:, 1].long(), num_classes=self.num_bond_classes)
             edge_attr = torch.cat([bond_one_hot, edge_attr], dim=-1)
         x_final, _ = self.egnn(x, h, edge_index, edge_attr)
         return subtract_com_batch(x_final - x, batch_index)

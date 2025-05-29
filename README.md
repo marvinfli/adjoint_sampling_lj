@@ -6,9 +6,10 @@ Note that the implementation might differ by +-1 or +-1/2 from the formula in th
 Quickstart
 ```bash
 git clone git@github.com:BurgerAndreas/adjoint_sampling_lj.git
+cd adjoint_sampling_lj
 
 micromamba env create -f environment.yml
-micromamba activate adjoint_sampling
+micromamba activate adjoint_sampling_lj
 
 python train.py experiment=lennard_jones
 ```
