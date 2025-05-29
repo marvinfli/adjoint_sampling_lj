@@ -1,3 +1,21 @@
+# Adjoint Sampling - Lennard-Jones
+
+Inoffical patch of [adjoint sampling](https://github.com/facebookresearch/adjoint_sampling) to include the Lennard-Jones potential, first introduced as a benchmark in [Equivariant Flows: Exact Likelihood Generative Learning for Symmetric Densities](https://github.com/noegroup/bgflow/blob/main/bgflow/distribution/energy/lennard_jones.py).
+Note that the implementation might differ by +-1 or +-1/2 from the formula in the adjoint sampling paper or their unpublished code.
+
+Quickstart
+```bash
+git clone git@github.com:BurgerAndreas/adjoint_sampling_lj.git
+
+micromamba env create -f environment.yml
+micromamba activate adjoint_sampling
+
+python train.py experiment=lennard_jones
+```
+
+
+---
+
 # Adjoint Sampling
 
 This repository contains the official implementation and experiments for Adjoint Sampling: Highly Scalable Diffusion
