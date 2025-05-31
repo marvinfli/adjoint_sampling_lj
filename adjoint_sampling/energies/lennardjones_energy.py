@@ -5,6 +5,12 @@ import torch
 
 import matplotlib.pyplot as plt
 import PIL
+import numpy as np
+import os
+from io import BytesIO
+from typing import Optional
+
+from hydra.utils import get_original_cwd
 
 import torch_geometric.utils as tg_utils
 from torch_geometric.utils import unbatch_edge_index, unbatch, sort_edge_index
@@ -14,10 +20,186 @@ from typing import Dict, Optional
 from adjoint_sampling.energies.regularizers import bond_structure_regularizer
 from adjoint_sampling.utils.visualize_utils import fig2img, interatomic_dist
 
+def remove_mean(x, num_particles, spatial_dim):
+    # x [B, N, 3]
+    if x.ndim == 2:
+        x = x.view(-1, num_particles, spatial_dim)
+    return x - torch.mean(x, dim=1, keepdim=True)
+
 def lennard_jones_energy_torch(r, eps=1.0, rm=1.0, tau=1.0):
     # p = 0.9
     lj = eps * ((rm / r)**12 - 2 * (rm / r)**6) # * 0.5 * tau
     return lj
+
+
+# https://github.com/noegroup/bgflow/blob/main/bgflow/utils/shape.py
+
+def tile(a, dim, n_tile):
+    """
+    Tiles a pytorch tensor along one an arbitrary dimension.
+
+    Parameters
+    ----------
+    a : PyTorch tensor
+        the tensor which is to be tiled
+    dim : Integer
+        dimension along the tensor is tiled
+    n_tile : Integer
+        number of tiles
+
+    Returns
+    -------
+    b : PyTorch tensor
+        the tensor with dimension `dim` tiled `n_tile` times
+    """
+    init_dim = a.size(dim)
+    repeat_idx = [1] * a.dim()
+    repeat_idx[dim] = n_tile
+    a = a.repeat(*(repeat_idx))
+    order_index = np.concatenate(
+        [init_dim * np.arange(n_tile) + i for i in range(init_dim)]
+    )
+    order_index = torch.LongTensor(order_index).to(a).long()
+    return torch.index_select(a, dim, order_index)
+
+# https://github.com/noegroup/bgflow/blob/main/bgflow/utils/geometry.py
+
+def distance_vectors(x, remove_diagonal=True):
+    r"""
+    Computes the matrix :math:`r` of all distance vectors between
+    given input points where
+
+    .. math::
+        r_{ij} = x_{i} - y_{j}
+
+    as used in :footcite:`Khler2020EquivariantFE`
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor of shape `[n_batch, n_particles, n_dimensions]`
+        containing input points.
+    remove_diagonal : boolean
+        Flag indicating whether the all-zero distance vectors
+        `x_i - x_i` should be included in the result
+
+    Returns
+    -------
+    r : torch.Tensor
+        Matrix of all distance vectors r.
+        If `remove_diagonal=True` this is a tensor of shape
+            `[n_batch, n_particles, n_particles, n_dimensions]`.
+        Otherwise this is a tensor of shape
+            `[n_batch, n_particles, n_particles - 1, n_dimensions]`.
+
+    Examples
+    --------
+    TODO
+
+    References
+    ----------
+    .. footbibliography::
+
+    """
+    r = tile(x.unsqueeze(2), 2, x.shape[1])
+    r = r - r.permute([0, 2, 1, 3])
+    if remove_diagonal:
+        r = r[:, torch.eye(x.shape[1], x.shape[1]) == 0].view(
+            -1, x.shape[1], x.shape[1] - 1, x.shape[2]
+        )
+    return r
+
+
+def distance_vectors_v2(x, y, remove_diagonal=True):
+    """
+    Computes the matrix `r` of all distance vectors between
+    given input points x and y where
+    .. math::
+        r_{ij} = x_{i} - y_{j}
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Tensor of shape `[n_batch, n_particles, n_dimensions]`
+        containing input points.
+    y : torch.Tensor
+        Tensor of shape `[n_batch, n_particles, n_dimensions]`
+        containing input points.
+    remove_diagonal : boolean
+        Flag indicating whether the all-zero distance vectors
+        `x_i - y_i` should be included in the result
+
+    Returns
+    -------
+    r : torch.Tensor
+        Matrix of all distance vectors r.
+        If `remove_diagonal=True` this is a tensor of shape
+            `[n_batch, n_particles, n_particles - 1, n_dimensions]`.
+        Otherwise this is a tensor of shape
+            `[n_batch, n_particles, n_particles, n_dimensions]`.
+
+    Examples
+    --------
+    TODO
+    """
+    r1 = tile(x.unsqueeze(2), 2, x.shape[1])
+    r2 = tile(y.unsqueeze(2), 2, y.shape[1])
+    r = r1 - r2.permute([0, 2, 1, 3])
+    if remove_diagonal:
+        r = r[:, torch.eye(x.shape[1], x.shape[1]) == 0].view(
+            -1, x.shape[1], x.shape[1] - 1, x.shape[2]
+        )
+    return r
+
+
+def distances_from_vectors(r, eps=1e-6):
+    """
+    Computes the all-distance matrix from given distance vectors.
+    
+    Parameters
+    ----------
+    r : torch.Tensor
+        Matrix of all distance vectors r.
+        Tensor of shape `[n_batch, n_particles, n_other_particles, n_dimensions]`
+    eps : Small real number.
+        Regularizer to avoid division by zero.
+    
+    Returns
+    -------
+    d : torch.Tensor
+        All-distance matrix d.
+        Tensor of shape `[n_batch, n_particles, n_other_particles]`.
+    """
+    return (r.pow(2).sum(dim=-1) + eps).sqrt()
+
+
+def compute_distances(x, n_particles, n_dimensions, remove_duplicates=True):
+    """
+    Computes the all distances for a given particle configuration x.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Positions of n_particles in n_dimensions.
+    remove_duplicates : boolean
+        Flag indicating whether to remove duplicate distances
+        and distances be.
+        If False the all distance matrix is returned instead.
+
+    Returns
+    -------
+    distances : torch.Tensor
+        All-distances between particles in a configuration
+        Tensor of shape `[n_batch, n_particles * (n_particles - 1) // 2]` if remove_duplicates.
+        Otherwise `[n_batch, n_particles , n_particles]`
+    """
+    x = x.reshape(-1, n_particles, n_dimensions)
+    distances = torch.cdist(x, x)
+    if remove_duplicates:
+        distances = distances[:, torch.triu(torch.ones((n_particles, n_particles)), diagonal=1) == 1]
+        distances = distances.reshape(-1, n_particles * (n_particles - 1) // 2)
+    return distances
+
 
 class LennardJonesEnergy(torch.nn.Module):
     """
@@ -37,7 +219,7 @@ class LennardJonesEnergy(torch.nn.Module):
         device="cuda", 
         default_regularize=False, 
         use_oscillator=True, 
-        oscillator_scale=0.25,
+        oscillator_scale=1.0,
     ):
         """
         Initialize the custom energy model.
@@ -68,6 +250,29 @@ class LennardJonesEnergy(torch.nn.Module):
         
         # vmapped functions
         self.energy_vmapped = torch.vmap(self._energy_vmap)
+        
+        # data paths
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # root is parent of parent of current dir
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        # MCMC samples from Klein et al. (2023b)
+        # Equivariant flow matching
+        # https://proceedings.neurips.cc/paper_files/paper/2023/hash/bc827452450356f9f558f4e4568d553b-Abstract-Conference.html
+        # copied from
+        # https://github.com/jarridrb/DEM/tree/8e9531987b0bfe4e770d5009c10a56b8434c0f0a/data
+        if num_particles == 13:
+            self.data_path_train = os.path.join(project_root, "data", f"train_split_LJ13-1000.npy")
+            self.data_path_val = os.path.join(project_root, "data", f"val_split_LJ13-1000.npy")
+            self.data_path_test = os.path.join(project_root, "data", f"test_split_LJ13-1000.npy")
+        elif num_particles == 55:
+            self.data_path_train = os.path.join(project_root, "data", f"train_split_LJ55-1000-part1.npy")
+            self.data_path_val = os.path.join(project_root, "data", f"val_split_LJ55-1000-part1.npy")
+            self.data_path_test = os.path.join(project_root, "data", f"test_split_LJ55-1000-part1.npy")
+        else:
+            self.data_path_train = None
+            self.data_path_val = None
+            self.data_path_test = None
+        
         
     
     # torch does not support composing vmap with torch.jit.script
@@ -102,9 +307,9 @@ class LennardJonesEnergy(torch.nn.Module):
             x_centered = (x - torch.mean(x, dim=1, keepdim=True))
             osc_energies = 0.5 * x_centered.pow(2).sum(dim=(-2, -1))
             lj_energies = lj_energies + osc_energies * self.oscillator_scale
-        return lj_energies
-    
-    def _energy(self, positions):
+        return lj_energies * 2
+
+    def _energy(self, x):
         """
         Compute energy for a batch of systems.
         Args:
@@ -113,23 +318,21 @@ class LennardJonesEnergy(torch.nn.Module):
         Returns:
             torch.Tensor: Energy value [B, 1]
         """
-        # [B, 2, 1]
-        x = positions
-        n_particles = x.shape[1]
-        dists = torch.cdist(x, x)
-        # remove_duplicates
-        dists = dists[:, torch.triu(torch.ones((n_particles, n_particles)), diagonal=1) == 1]
-        dists = dists.reshape(-1, n_particles * (n_particles - 1) // 2)
-        # compute lennard jones energy
-        lj = ((1.0 / dists)**12 - 2 * (1.0 / dists)**6) 
-        # sum over relative distances
-        lj = lj.sum(dim=1)
+        # [B, N, N-1]
+        dists = distances_from_vectors(
+            distance_vectors(x) # [B, N, N-1, 3]
+        )
+
+        # [B, N, N-1] -> [B]
+        lj_energies = lennard_jones_energy_torch(dists, 1.0, 1.0)
+        # lj_energies = torch.clip(lj_energies, -1e4, 1e4)
+        lj_energies = lj_energies.sum(dim=(-2, -1)) # [B]
+
         if self.use_oscillator:
-            # [B, N, 3] -> [B]
-            x_centered = (x - torch.mean(x, dim=1, keepdim=True))
-            osc_energies = 0.5 * x_centered.pow(2).sum(dim=(-2, -1))
-            lj = lj + osc_energies * self.oscillator_scale
-        return lj
+            osc_energies = 0.5 * self._remove_mean(x).pow(2).sum(dim=(-2, -1)) # [B]
+            lj_energies = lj_energies + osc_energies * self.oscillator_scale
+
+        return lj_energies
     
     def forward(self, graph_state, regularize=None):
         """
@@ -241,6 +444,33 @@ class LennardJonesEnergy(torch.nn.Module):
         return energy_reg, -gradient
     
     
+    def setup_test_set(self):
+        data_np = np.load(self.data_path_test, allow_pickle=True)
+        data_torch = torch.from_numpy(data_np).to(dtype=torch.float32, device=self.device)
+        data = remove_mean(data_torch, self.num_particles, self.spatial_dim)
+        return data
+
+    def setup_val_set(self):
+        if self.data_path_val is None:
+            raise ValueError("Data path for validation data is not provided")
+        data_np = np.load(self.data_path_val, allow_pickle=True)
+        data_torch = torch.from_numpy(data_np).to(dtype=torch.float32, device=self.device)
+        data = remove_mean(data_torch, self.num_particles, self.spatial_dim)
+        return data
+
+    def setup_train_set(self):
+        if self.data_path_train is None:
+            raise ValueError("Data path for training data is not provided")
+
+        if self.data_path_train.endswith(".pt"):
+            data_np = torch.load(self.data_path_train).cpu().numpy()
+        else:
+            data_np = np.load(self.data_path_train, allow_pickle=True)
+
+        data_torch = torch.from_numpy(data_np).to(dtype=torch.float32, device=self.device)
+        data = remove_mean(data_torch, self.num_particles, self.spatial_dim)
+        return data
+    
     
     def get_fig_samples_in_potential(self, graph_state, energies, cfg, outputs=None):
         
@@ -292,14 +522,130 @@ class LennardJonesEnergy(torch.nn.Module):
         PIL_im = fig2img(fig)
         plt.close()
         return PIL_im
-    
 
+    def log_samples(
+        self,
+        samples: torch.Tensor,
+        wandb_logger,
+        name: str = "",
+    ) -> None:
+        if wandb_logger is None:
+            return
+
+        samples_fig = self.get_dataset_fig(samples)
+        wandb_logger.log_image(f"{name}", [samples_fig])
+
+    def get_dataset_fig(self, samples):
+        """Energy histogram and interatomic distance histogram.
+        Args:
+            samples: [B, N, 3]
+        Returns:
+            PIL.Image
+        Usage:
+            samples_fig = self.get_dataset_fig(latest_samples)
+            wandb_logger.log_image(f"{prefix}generated_samples", [samples_fig])
+        """
+        test_data_smaller = self.sample_test_set(1000)
+
+        fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+
+        dist_samples = self.interatomic_dist(samples).detach().cpu()
+        dist_test = self.interatomic_dist(test_data_smaller).detach().cpu()
+
+        if self.n_particles == 13:
+            bins = 100
+        elif self.n_particles == 55:
+            bins = 50
+
+        axs[0].hist(
+            dist_samples.view(-1),
+            bins=bins,
+            alpha=0.5,
+            density=True,
+            histtype="step",
+            linewidth=4,
+        )
+        axs[0].hist(
+            dist_test.view(-1),
+            bins=100,
+            alpha=0.5,
+            density=True,
+            histtype="step",
+            linewidth=4,
+        )
+        axs[0].set_xlabel("Interatomic distance")
+        axs[0].legend(["generated data", "test data"])
+
+        energy_samples = -self(samples).detach().detach().cpu()
+        energy_test = -self(test_data_smaller).detach().detach().cpu()
+
+        # min_energy = min(energy_test.min(), energy_samples.min()).item()
+        # max_energy = max(energy_test.max(), energy_samples.max()).item()
+        if self.n_particles == 13:
+            min_energy = -60
+            max_energy = 0
+
+        elif self.n_particles == 55:
+            min_energy = -380
+            max_energy = -180
+
+        axs[1].hist(
+            energy_test.cpu(),
+            bins=100,
+            density=True,
+            alpha=0.4,
+            range=(min_energy, max_energy),
+            color="g",
+            histtype="step",
+            linewidth=4,
+            label="test data",
+        )
+        axs[1].hist(
+            energy_samples.cpu(),
+            bins=100,
+            density=True,
+            alpha=0.4,
+            range=(min_energy, max_energy),
+            color="r",
+            histtype="step",
+            linewidth=4,
+            label="generated data",
+        )
+        axs[1].set_xlabel("Energy")
+        axs[1].legend()
+
+        try:
+            buffer = BytesIO()
+            fig.savefig(buffer, format="png", bbox_inches="tight", pad_inches=0)
+            buffer.seek(0)
+
+            return PIL.Image.open(buffer)
+
+        except Exception as e:
+            fig.canvas.draw()
+            return PIL.Image.frombytes(
+                "RGB", fig.canvas.get_width_height(), fig.canvas.renderer.buffer_rgba()
+            )
 
     
 if __name__ == "__main__":
-    num_particles = 8
-    energy_model = LennardJonesEnergy(num_particles=num_particles)
-    samples = torch.randn(256, num_particles, 3, device=energy_model.device)
-    energy = energy_model.energy_vmapped(samples)
+    num_particles = 13
+    energy_model = LennardJonesEnergy(num_particles=num_particles, use_oscillator=False)
+    
+    B = 2
+    samples = torch.randn(B, num_particles, 3, device=energy_model.device)
+    print(f"samples: {samples.shape}")
+    energy_vmapped = energy_model.energy_vmapped(samples)
+    print(f"energy vmap: {energy_vmapped.shape}")
+    
+    energy = energy_model._energy(samples)
     print(f"energy: {energy.shape}")
+    
+    train_data = energy_model.setup_train_set()
+    val_data = energy_model.setup_val_set()
+    test_data = energy_model.setup_test_set()
+    
+    print(f"train_data: {train_data.shape}")
+    print(f"val_data: {val_data.shape}")
+    print(f"test_data: {test_data.shape}")
     
