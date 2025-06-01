@@ -8,9 +8,9 @@ defaults:
   # - _self_
   # - override hydra/launcher: submitit_slurm
 
-num_particles: 2
+n_particles: 13
 spatial_dim: 3 # space dimension
-# dof: 1 # number of edges = num_particles * (num_particles - 1) / 2
+# dof: 1 # number of edges = n_particles * (n_particles - 1) / 2
 
 # Basic settings
 seed: 0                  # Random seed for reproducibility

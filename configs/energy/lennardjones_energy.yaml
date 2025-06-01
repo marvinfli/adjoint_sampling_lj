@@ -2,6 +2,6 @@ _target_: adjoint_sampling.energies.lennardjones_energy.LennardJonesEnergy  # En
 tau: ${tau}  # Temperature parameter 
 alpha: ${alpha}  # bond structure regularizing energy
 device: ${device}  # Device to run training on
-num_particles: ${num_particles}  # Number of particles in the system
+n_particles: ${n_particles}  # Number of particles in the system
 use_oscillator: True
 oscillator_scale: 0.5

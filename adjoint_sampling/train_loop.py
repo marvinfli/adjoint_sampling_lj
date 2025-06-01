@@ -135,5 +135,7 @@ def train_one_epoch(
                 "bm_loss": bm_loss.item(),
                 "grad_norm": grad_norm.item(),
             }, step=global_step)
+            
+        global_step += 1
 
     return {"loss": float(epoch_loss.compute().detach().cpu())}, global_step

@@ -1,6 +1,6 @@
 _target_: adjoint_sampling.components.identicalparticles_dataset.get_identical_particles_dataset
 # _partial_: True
 # energy_model will be passed in from the training script
-num_particles: ${num_particles}
+n_particles: ${n_particles}
 num_samples: ${num_eval_samples}
 spatial_dim: ${spatial_dim} 

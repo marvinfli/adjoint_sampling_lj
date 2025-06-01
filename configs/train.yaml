@@ -4,7 +4,7 @@ defaults:
   - energy: fairchem_energy
   - noise_schedule: geometric
   - dataset: spice_dataset
-  - eval_dataset: identical_particles_eval
+  - eval_dataset: homogeneous_eval
   - experiment: spice_cartesian
   - override hydra/launcher: submitit_slurm
 

@@ -1,5 +1,5 @@
 _target_: adjoint_sampling.components.identicalparticles_dataset.IdenticalParticlesDataset  # Dataset class
-num_particles: ${num_particles}  # Number of particles from above
+n_particles: ${n_particles}  # Number of particles from above
 spatial_dim: ${spatial_dim}  # Dimension from above
 num_samples: 100  # Number of samples in dataset
 duplicate: 1  # Number of times to duplicate each sample

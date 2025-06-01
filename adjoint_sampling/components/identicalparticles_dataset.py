@@ -9,23 +9,23 @@ class IdenticalParticlesDataset(Dataset):
     Dataset for arbitrary coordinate-based systems without molecular connectivity.
     """
     
-    def __init__(self, energy_model, num_particles, num_samples=100, spatial_dim=3, duplicate=1):
+    def __init__(self, energy_model, n_particles, num_samples=100, spatial_dim=3, duplicate=1):
         """
         Initialize the custom dataset.
         
         Args:
             energy_model: Model to compute energies/forces
-            num_particles (int): Number of particles in each system
+            n_particles (int): Number of particles in each system
             duplicate (int): Number of samples in the dataset
             spatial_dim (int): Dimensionality of the space (usually 3)
             duplicate (int): Number of duplicate copies (for distributed training)
         """
         super().__init__()
         self.energy_model = energy_model
-        self.num_particles = num_particles
+        self.n_particles = n_particles
         self.num_samples = num_samples
         self.spatial_dim = spatial_dim
-        self.dim = spatial_dim * num_particles
+        self.dim = spatial_dim * n_particles
         
     def len(self):
         """Return the number of samples in the dataset."""
@@ -44,8 +44,8 @@ class IdenticalParticlesDataset(Dataset):
         # see datasets.get_spice_dataset
         
         # Set zero initial positions
-        # positions = torch.randn(self.num_particles, self.spatial_dim)
-        positions = torch.zeros(self.num_particles, self.spatial_dim)
+        # positions = torch.randn(self.n_particles, self.spatial_dim)
+        positions = torch.zeros(self.n_particles, self.spatial_dim)
         
         # Create a PyG Data object with the necessary attributes
         # see utils.data_utils.get_atomic_graph
@@ -54,7 +54,7 @@ class IdenticalParticlesDataset(Dataset):
         atomic_index_table = {int(z): i for i, z in enumerate(atomic_number_table)}
         
         data: Data = get_atomic_graph(
-            atom_list=[0] * self.num_particles,
+            atom_list=[0] * self.n_particles,
             positions=positions,
             z_table=atomic_index_table,
         )
@@ -62,14 +62,14 @@ class IdenticalParticlesDataset(Dataset):
         # see datasets.process_smiles
         edge_index = data.edge_index
         
-        length_matrix = torch.full((self.num_particles, self.num_particles), fill_value=0.0)
+        length_matrix = torch.full((self.n_particles, self.n_particles), fill_value=0.0)
         length_attr = length_matrix[edge_index[0], edge_index[1]].unsqueeze(-1)
-        type_matrix = torch.full((self.num_particles, self.num_particles), fill_value=0.0)
+        type_matrix = torch.full((self.n_particles, self.n_particles), fill_value=0.0)
         type_attr = type_matrix[edge_index[0], edge_index[1]].unsqueeze(-1)
         edge_attr = torch.cat([length_attr, type_attr], dim=-1).float()
         data["edge_attrs"] = edge_attr
         
-        data["smiles"] = "H" * self.num_particles
+        data["smiles"] = "H" * self.n_particles
         
         return data
     
@@ -85,13 +85,13 @@ class IdenticalParticlesDataset(Dataset):
         return torch.tensor([rows, cols], dtype=torch.long)
         
 def get_identical_particles_dataset(
-    energy_model, num_particles, spatial_dim=3, num_samples=100, 
+    energy_model, n_particles, spatial_dim=3, num_samples=100, 
     # taken from fairchem.core.models.esen.esen.py
     max_atom_types=100
 ):
     # Set zero initial positions
-    # positions = torch.randn(self.num_particles, self.spatial_dim)
-    positions = torch.zeros(num_particles, spatial_dim)
+    # positions = torch.randn(self.n_particles, self.spatial_dim)
+    positions = torch.zeros(n_particles, spatial_dim)
     
     # Create a PyG Data object with the necessary attributes
     # see utils.data_utils.get_atomic_graph
@@ -100,7 +100,7 @@ def get_identical_particles_dataset(
     atomic_index_table = {int(z): i for i, z in enumerate(atomic_number_table)}
     
     data: Data = get_atomic_graph(
-        atom_list=[0] * num_particles,
+        atom_list=[0] * n_particles,
         positions=positions,
         z_table=atomic_index_table,
     )
@@ -109,15 +109,15 @@ def get_identical_particles_dataset(
     edge_index = data.edge_index
     
     # uniform unbonded edges
-    length_matrix = torch.full((num_particles, num_particles), fill_value=0.0)
+    length_matrix = torch.full((n_particles, n_particles), fill_value=0.0)
     length_attr = length_matrix[edge_index[0], edge_index[1]].unsqueeze(-1)
-    type_matrix = torch.full((num_particles, num_particles), fill_value=0.0)
+    type_matrix = torch.full((n_particles, n_particles), fill_value=0.0)
     type_attr = type_matrix[edge_index[0], edge_index[1]].unsqueeze(-1)
     edge_attr = torch.cat([length_attr, type_attr], dim=-1).float()
     data["edge_attrs"] = edge_attr
     
     # just a placeholder
-    data["smiles"] = "H" * num_particles
+    data["smiles"] = "H" * n_particles
     
     # dataset of duplicate copies
     dataset = []

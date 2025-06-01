@@ -560,7 +560,7 @@ def test_dataset(
     return dataset
 
 
-def xyz_to_loader(filename, smiles, energy_model):
+def xyz_to_loader(filename, smiles, energy_model, batch_size=1):
     atomic_number_table = energy_model.atomic_numbers
     atomic_index_table = {int(z): i for i, z in enumerate(atomic_number_table)}
 
@@ -577,9 +577,12 @@ def xyz_to_loader(filename, smiles, energy_model):
         data_i = get_atomic_graph(atomic_numbers, positions, atomic_index_table)
         data_set.append(data_i)
 
+    if batch_size == -1:
+        batch_size = len(molecules)
+        
     data_loader = DataLoader(
         dataset=data_set,
-        batch_size=len(molecules),
+        batch_size=batch_size,
         shuffle=False,
         drop_last=False,
     )

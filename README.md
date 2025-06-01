@@ -12,6 +12,9 @@ micromamba env create -f environment.yml
 micromamba activate adjoint_sampling_lj
 
 python train.py experiment=lennard_jones
+
+# python cache_dataset.py
+# python train.py experiment=spice_cartesian_small
 ```
 
 

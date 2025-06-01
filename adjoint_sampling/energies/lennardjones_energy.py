@@ -20,10 +20,10 @@ from typing import Dict, Optional
 from adjoint_sampling.energies.regularizers import bond_structure_regularizer
 from adjoint_sampling.utils.visualize_utils import fig2img, interatomic_dist
 
-def remove_mean(x, num_particles, spatial_dim):
+def remove_mean(x, n_particles, spatial_dim):
     # x [B, N, 3]
     if x.ndim == 2:
-        x = x.view(-1, num_particles, spatial_dim)
+        x = x.view(-1, n_particles, spatial_dim)
     return x - torch.mean(x, dim=1, keepdim=True)
 
 def lennard_jones_energy_torch(r, eps=1.0, rm=1.0, tau=1.0):
@@ -211,7 +211,7 @@ class LennardJonesEnergy(torch.nn.Module):
     
     def __init__(
         self, 
-        num_particles, 
+        n_particles, 
         spatial_dim=3,
         tau=1.0, 
         alpha=0.0, 
@@ -230,7 +230,7 @@ class LennardJonesEnergy(torch.nn.Module):
             device (str): Device to run model on
         """
         super().__init__()
-        self.num_particles = num_particles
+        self.n_particles = n_particles
         self.spatial_dim = spatial_dim
         self.tau = tau
         self.alpha = alpha
@@ -246,7 +246,7 @@ class LennardJonesEnergy(torch.nn.Module):
         
         # from fairchem_energy
         # self.atomic_numbers = torch.arange(100)
-        self.atomic_numbers = torch.ones(num_particles, dtype=torch.long)
+        self.atomic_numbers = torch.ones(n_particles, dtype=torch.long)
         
         # vmapped functions
         self.energy_vmapped = torch.vmap(self._energy_vmap)
@@ -260,11 +260,11 @@ class LennardJonesEnergy(torch.nn.Module):
         # https://proceedings.neurips.cc/paper_files/paper/2023/hash/bc827452450356f9f558f4e4568d553b-Abstract-Conference.html
         # copied from
         # https://github.com/jarridrb/DEM/tree/8e9531987b0bfe4e770d5009c10a56b8434c0f0a/data
-        if num_particles == 13:
+        if n_particles == 13:
             self.data_path_train = os.path.join(project_root, "data", f"train_split_LJ13-1000.npy")
             self.data_path_val = os.path.join(project_root, "data", f"val_split_LJ13-1000.npy")
             self.data_path_test = os.path.join(project_root, "data", f"test_split_LJ13-1000.npy")
-        elif num_particles == 55:
+        elif n_particles == 55:
             self.data_path_train = os.path.join(project_root, "data", f"train_split_LJ55-1000-part1.npy")
             self.data_path_val = os.path.join(project_root, "data", f"val_split_LJ55-1000-part1.npy")
             self.data_path_test = os.path.join(project_root, "data", f"test_split_LJ55-1000-part1.npy")
@@ -273,6 +273,14 @@ class LennardJonesEnergy(torch.nn.Module):
             self.data_path_val = None
             self.data_path_test = None
         
+        if n_particles in [13, 55]:
+            self.train_set = self.setup_train_set()
+            self.val_set = self.setup_val_set()
+            self.test_set = self.setup_test_set()
+        else:
+            self.train_set = None
+            self.val_set = None
+            self.test_set = None
         
     
     # torch does not support composing vmap with torch.jit.script
@@ -443,11 +451,15 @@ class LennardJonesEnergy(torch.nn.Module):
         )[0]
         return energy_reg, -gradient
     
+    def score(self, samples: torch.Tensor) -> torch.Tensor:
+        grad_fxn = torch.func.grad(self._energy)
+        vmapped_grad = torch.vmap(grad_fxn)
+        return -vmapped_grad(samples)
     
     def setup_test_set(self):
         data_np = np.load(self.data_path_test, allow_pickle=True)
         data_torch = torch.from_numpy(data_np).to(dtype=torch.float32, device=self.device)
-        data = remove_mean(data_torch, self.num_particles, self.spatial_dim)
+        data = remove_mean(data_torch, self.n_particles, self.spatial_dim)
         return data
 
     def setup_val_set(self):
@@ -455,7 +467,7 @@ class LennardJonesEnergy(torch.nn.Module):
             raise ValueError("Data path for validation data is not provided")
         data_np = np.load(self.data_path_val, allow_pickle=True)
         data_torch = torch.from_numpy(data_np).to(dtype=torch.float32, device=self.device)
-        data = remove_mean(data_torch, self.num_particles, self.spatial_dim)
+        data = remove_mean(data_torch, self.n_particles, self.spatial_dim)
         return data
 
     def setup_train_set(self):
@@ -468,9 +480,60 @@ class LennardJonesEnergy(torch.nn.Module):
             data_np = np.load(self.data_path_train, allow_pickle=True)
 
         data_torch = torch.from_numpy(data_np).to(dtype=torch.float32, device=self.device)
-        data = remove_mean(data_torch, self.num_particles, self.spatial_dim)
+        data = remove_mean(data_torch, self.n_particles, self.spatial_dim)
         return data
     
+    def sample_test_set(
+        self, num_points: int, normalize: bool = False, full: bool = False
+    ) -> Optional[torch.Tensor]:
+        if self.test_set is None:
+            return None
+
+        if full:
+            outs = self.test_set
+        else:
+            idxs = torch.randperm(len(self.test_set))[:num_points]
+            outs = self.test_set[idxs]
+        if normalize:
+            outs = self.normalize(outs)
+
+        return outs
+
+    def sample_train_set(self, num_points: int, normalize: bool = False) -> Optional[torch.Tensor]:
+        if self.train_set is None:
+            self._train_set = self.setup_train_set()
+
+        idxs = torch.randperm(len(self.train_set))[:num_points]
+        outs = self.train_set[idxs]
+        if normalize:
+            outs = self.normalize(outs)
+
+        return outs
+
+    def sample_val_set(self, num_points: int, normalize: bool = False) -> Optional[torch.Tensor]:
+        if self.val_set is None:
+            return None
+
+        idxs = torch.randperm(len(self.val_set))[:num_points]
+        outs = self.val_set[idxs]
+        if normalize:
+            outs = self.normalize(outs)
+
+        return outs
+    
+    def interatomic_dist(self, x):
+        # x: [B, N, D]
+        # x = x.view(x.shape[0], self.n_particles, self.spatial_dim)
+
+        # Compute the pairwise interatomic distances
+        # removes duplicates and diagonal
+        distances = x[:, None, :, :] - x[:, :, None, :]
+        distances = distances[
+            :,
+            torch.triu(torch.ones((self.n_particles, self.n_particles)), diagonal=1) == 1,
+        ]
+        dist = torch.linalg.norm(distances, dim=-1)
+        return dist
     
     def get_fig_samples_in_potential(self, graph_state, energies, cfg, outputs=None):
         
@@ -490,7 +553,7 @@ class LennardJonesEnergy(torch.nn.Module):
         _bs = 100
         
         # if there are only 2d particles, it's effictevily a 1d potential of the relative distance
-        if self.num_particles == 2:
+        if self.n_particles == 2:
             fig, ax = plt.subplots()
             # get relative distances in batch [B * N, 1]
             dist = interatomic_dist(x).detach().cpu()
@@ -576,8 +639,8 @@ class LennardJonesEnergy(torch.nn.Module):
         axs[0].set_xlabel("Interatomic distance")
         axs[0].legend(["generated data", "test data"])
 
-        energy_samples = -self(samples).detach().detach().cpu()
-        energy_test = -self(test_data_smaller).detach().detach().cpu()
+        energy_samples = self._energy(samples).detach().detach().cpu()
+        energy_test = self._energy(test_data_smaller).detach().detach().cpu()
 
         # min_energy = min(energy_test.min(), energy_samples.min()).item()
         # max_energy = max(energy_test.max(), energy_samples.max()).item()
@@ -629,11 +692,11 @@ class LennardJonesEnergy(torch.nn.Module):
 
     
 if __name__ == "__main__":
-    num_particles = 13
-    energy_model = LennardJonesEnergy(num_particles=num_particles, use_oscillator=False)
+    n_particles = 13
+    energy_model = LennardJonesEnergy(n_particles=n_particles, use_oscillator=False)
     
     B = 2
-    samples = torch.randn(B, num_particles, 3, device=energy_model.device)
+    samples = torch.randn(B, n_particles, 3, device=energy_model.device)
     print(f"samples: {samples.shape}")
     energy_vmapped = energy_model.energy_vmapped(samples)
     print(f"energy vmap: {energy_vmapped.shape}")
@@ -648,4 +711,8 @@ if __name__ == "__main__":
     print(f"train_data: {train_data.shape}")
     print(f"val_data: {val_data.shape}")
     print(f"test_data: {test_data.shape}")
+    
+    # get dataset fig
+    fig = energy_model.get_dataset_fig(samples)
+    print(f"fig: {type(fig)}")
     

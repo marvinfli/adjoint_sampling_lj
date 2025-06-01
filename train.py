@@ -10,6 +10,10 @@ from pathlib import Path
 import adjoint_sampling.utils.distributed_mode as distributed_mode
 import hydra
 import numpy as np
+import PIL
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from PIL.PngImagePlugin import PngImageFile
 
 import pytorch_warmup as warmup
 import torch
@@ -37,13 +41,24 @@ from tqdm import tqdm
 import wandb
 
 
+
 cudnn.benchmark = True
+
+# Configure RDKit logger to silence warnings
+# RDKit warnings are done at the C++ level and
+# they don't integrate well with the normal Python warnings module.
+from rdkit import RDLogger  
+RDLogger.DisableLog('rdApp.*')
 
 
 @hydra.main(config_path="configs", config_name="train.yaml", version_base="1.1")
 def main(cfg):
     if cfg.use_wandb:
-        wandb.init(project=cfg.wandb_project, name=cfg.wandb_name)
+        wandb.init(
+            project=cfg.wandb_project, 
+            name=cfg.wandb_name, 
+            config=OmegaConf.to_container(cfg)
+        )
     
     try:
 
@@ -56,11 +71,11 @@ def main(cfg):
                 )
             )
 
-        print(dict(os.environ))
+        # print("Environment variables:", dict(os.environ))
         distributed_mode.init_distributed_mode(cfg)
 
         print("job dir: {}".format(os.path.dirname(os.path.realpath(__file__))))
-        print(str(cfg))
+        print("Config:", str(cfg))
         if distributed_mode.is_main_process():
             args_filepath = Path("cfg.yaml")
             print(f"Saving cfg to {args_filepath}")
@@ -99,13 +114,13 @@ def main(cfg):
         if os.path.exists(checkpoint_path):
             print(f"Loading checkpoint from {checkpoint_path}")
             # map_location = {"cuda:%d" % 0: "cuda:%d" % distributed_mode.get_rank()}
-            checkpoint = torch.load(checkpoint_path)  # , map_location=map_location)
+            checkpoint = torch.load(checkpoint_path, weights_only=False)  # , map_location=map_location)
             controller.load_state_dict(checkpoint["controller_state_dict"])
             start_epoch = checkpoint["epoch"] + 1
         else:
             if cfg.init_model is not None:
                 print(f"Loading initial weights from {cfg.init_model}")
-                checkpoint = torch.load(cfg.init_model)
+                checkpoint = torch.load(cfg.init_model, weights_only=False)
                 controller.load_state_dict(
                     torch.load(cfg.init_model, weights_only=False)[
                         "controller_state_dict"
@@ -277,6 +292,12 @@ def main(cfg):
                             cfg=cfg,
                         )
                         eval_dict["energy_vis"].save("test_im.png")
+                        
+                        for k, v in eval_dict.items():
+                            if isinstance(v, Figure) or isinstance(v, PngImageFile):
+                                wandb.log({f"{k}": wandb.Image(v)}, step=global_step)
+                            else:
+                                wandb.log({f"{k}": v}, step=global_step)
 
                         if cfg.save_checkpoints:
                             print("saving checkpoint ... ")

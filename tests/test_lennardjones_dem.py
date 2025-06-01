@@ -47,7 +47,7 @@ if __name__ == "__main__":
     x = x.reshape(B, N, D)
     
     # test our implementation of the energy function
-    energy_model = LennardJonesEnergy(num_particles=N, use_oscillator=use_oscillator, device=device)
+    energy_model = LennardJonesEnergy(n_particles=N, use_oscillator=use_oscillator, device=device)
     
     energy = energy_model._energy(x)
     print(f"energy: {energy.shape}")

@@ -75,15 +75,12 @@ def evaluation(
         graph_state, controls = integrate_sde(
             sde, batch, cfg.eval_nfe, only_final_state=False
         )
-        # print(energy_model(graph_state))
         output = energy_model(graph_state)
 
         # torch.save(graph_state, "samples.pt")
         # torch.save(outputs, "sample_outputs.pt")
 
         # generated_energies = outputs["energy"]
-        states.append(graph_state)
-        outputs.append(output)
         if cfg.learn_torsions:
             soc_loss += SOC_loss_torsion(
                 controls, graph_state, output["energy"], noise_schedule
@@ -92,18 +89,31 @@ def evaluation(
             soc_loss += SOC_loss(
                 controls, graph_state, output["energy"], noise_schedule
             )
+        states.append(graph_state.to("cpu"))
+        output = {k: v.detach().cpu() for k, v in output.items()}
+        outputs.append(output)
 
     # if not os.path.exists(cfg.sample_dir):
     #    os.makedirs(cfg.sample_dir)
     # save_to_xyz(states, outputs, atomic_number_table, rank, cfg.sample_dir)
     # soc_loss = SOC_loss(controls, states[0], outputs[0]["energy"], noise_schedule)
-    soc_loss = (soc_loss / cfg.num_eval_samples).detach().cpu().item()
+    soc_loss = soc_loss / cfg.num_eval_samples
     if cfg.conformers_file is not None:
         path = to_absolute_path(cfg.conformers_file)
-        loader = xyz_to_loader(path, cfg.eval_smiles, energy_model)
-        conformer_outputs = energy_model(
-            next(iter(loader)).to(device), regularize=False
-        )
+        loader = xyz_to_loader(path, cfg.eval_smiles, energy_model, batch_size=cfg.eval_batch_size)
+        conformer_outputs = []
+        for _sample in loader:
+            sample = _sample.to(device)
+            outs = energy_model(sample, regularize=False)
+            outs = {k: v.detach().cpu() for k, v in outs.items()}
+            conformer_outputs.append(outs)
+        
+        # combine outputs into a single batch
+        conformer_outputs = {
+            k: torch.vstack([_output[k] for _output in conformer_outputs])
+            for k in conformer_outputs[0].keys()
+        }   
+        
         # print(conformer_outputs['energy'])
         # conformer_energies = output["energy"].detach().cpu().numpy()
 
@@ -113,6 +123,7 @@ def evaluation(
     Im = get_dataset_fig(
         states[0], outputs[0]["energy"], cfg, outputs=conformer_outputs
     )
+    
     if cfg.visualize_conformations:
         visualize_conformations(
             states[0], outputs[0], atomic_number_table, n_samples=16
@@ -133,4 +144,13 @@ def evaluation(
         # raise FileNotFoundError("we must have a cfg.conformers_file")
         print("Warning: No cfg.conformers_file")
 
-    return {"soc_loss": soc_loss, "energy_vis": Im}
+    eval_dict = {"soc_loss": soc_loss, "energy_vis": Im}
+    
+    if hasattr(energy_model, "get_dataset_fig"):
+        # [B*N, 3] -> [B, N, 3]
+        positions = states[0]["positions"].view(states[0]["natoms"].numel(), -1, 3) 
+        im = energy_model.get_dataset_fig(
+            samples = positions, 
+        )
+        eval_dict["energy_histogram"] = im
+    return eval_dict

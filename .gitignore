@@ -20,3 +20,5 @@ Thumbs.db
 
 results/
 *.png
+
+*.pkl

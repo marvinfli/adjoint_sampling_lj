@@ -56,7 +56,7 @@ def SOC_loss(controls, graph_state, energies, noise_schedule):
     )
     terminal_cost = energies + log_pb_1
     # unnormalized cost, only average after accumulation
-    return (stage_cost + terminal_cost).sum()
+    return (stage_cost + terminal_cost).sum().detach().cpu().item()
 
 
 @torch.no_grad()

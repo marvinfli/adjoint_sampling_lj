@@ -760,7 +760,8 @@ class DEMLennardJonesEnergy(DEMBaseEnergyFunction):
         return data
 
     def interatomic_dist(self, x):
-        batch_shape = x.shape[: -len(self.lennard_jones.event_shape)]
+        batch_shape = x.shape[: -len(self.lennard_jones.event_shape)] # B
+        # x [B, N*D] -> [B, N, D]
         x = x.view(*batch_shape, self.n_particles, self.n_spatial_dim)
 
         # Compute the pairwise interatomic distances
@@ -924,4 +925,6 @@ if __name__ == "__main__":
     energy_vmap = torch.vmap(energy)
     print("energy_vmap(x)", energy_vmap(x).shape)
     
+    x = x.reshape(B, N*D)
+    energy.get_dataset_fig(x)
     

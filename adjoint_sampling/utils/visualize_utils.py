@@ -79,6 +79,8 @@ def get_dataset_fig(graph_state, energies, cfg, outputs=None):
     axs[1].set_xlabel("Energy")
     axs[1].legend()
 
+    # fig: <class 'matplotlib.figure.Figure'>
+    # PIL_im: <class 'PIL.PngImagePlugin.PngImageFile'>
     fig.canvas.draw()
     PIL_im = fig2img(fig)
     plt.close()
