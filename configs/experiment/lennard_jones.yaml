@@ -50,8 +50,8 @@ visualize_conformations: True   # Whether to visualize conformations during eval
 compute_coverage: False         # Whether to compute conformational coverage metrics
 
 # Energy model parameters
-tau : 1e-3              # Temperature parameter for the energy model
-alpha : 1e3             # weight of bond_structure_regularizer energy
+tau : 1              # Temperature parameter for the forces in the energy model
+alpha : 0             # weight of bond_structure_regularizer energy
 
 # Score clipping parameters to prevent numerical instability
 clip_scores: True       # Whether to clip score values
