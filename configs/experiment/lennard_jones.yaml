@@ -18,16 +18,16 @@ device: cuda             # Device to run training on (cuda or cpu)
 learn_torsions: false    # If true, model in torsion space; if false, model in Cartesian coordinates
 
 # Training parameters
-num_batches_per_epoch: 100  # Number of batches to process in each epoch
+num_batches_per_epoch: 500  # Number of batches to process in each epoch
 
 # Sample generation settings
 num_init_samples: 1024   # Number of initial samples to generate for buffer
-num_samples_per_epoch: 512   # Number of new samples to generate per epoch
+num_samples_per_epoch: 1024   # Number of new samples to generate per epoch
 
 # Training duration settings
 start_epoch: 0          # First epoch to start training from
-num_epochs: 1000        # Total number of epochs to train
-batch_size: 256         # Batch size for training
+num_epochs: 1_000        # Total number of epochs to train
+batch_size: 512         # Batch size for training
 
 # Sampling settings
 train_nfe: 500          # Number of function evaluations for training samples
@@ -35,7 +35,7 @@ eval_nfe: 500           # Number of function evaluations for evaluation samples
 num_eval_samples: 1024  # Number of samples to use for evaluation
 
 # Optimizer settings
-lr: 1e-4                # Learning rate
+lr: 3e-4                # Learning rate
 lr_schedule: null       # Learning rate schedule (null = constant learning rate)
   
 # Buffer settings
@@ -69,12 +69,17 @@ duplicates: 1           # Number of times to duplicate each molecule in dataset
 
 controller:
   _target_: adjoint_sampling.components.controllers.EGNN_dynamics
-  n_layers: 3
+  n_layers: 5
   n_atoms: 100 
   uniform: False # if true, all particles and edges are the same
-  hidden_nf: 32
+  hidden_nf: 128
   agg: "sum"
   # spatial_dim: 3
+
+noise_schedule:
+	_target_: adjoint_sampling.components.noise_schedule.GeometricNoiseSchedule
+	sigma_min: 1e-3
+	sigma_max: 3.0
 
 # custom 
 save_checkpoints: False
