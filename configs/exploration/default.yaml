@@ -1,6 +1,0 @@
-# @package _global_
-
-# Default exploration strategy: None
-# This uses the standard SDE integration without any exploration modifications
-
-exploration: null 

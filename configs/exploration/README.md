@@ -10,8 +10,8 @@ The exploration framework allows you to modify the drift and diffusion terms dur
 
 ## Available Strategies
 
-### 1. Default (`default.yaml`)
-- **Exploration**: `null` (None)
+### 1. Default (No Config)
+- **Exploration**: `null` (None) - this is the default when no exploration config is specified
 - **Use case**: Standard adjoint sampling behavior (default)
 - **Note**: When exploration is None, the system uses standard SDE integration without any modifications
 
@@ -38,7 +38,6 @@ defaults:
 exploration:
   _target_: adjoint_sampling.components.exploration.SomeStepwiseNoise
   noise_scale: 0.2
-  step_threshold: 0.3
 
 # Or explicitly set to None for standard behavior
 exploration: null
