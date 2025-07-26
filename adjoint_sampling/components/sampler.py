@@ -228,6 +228,7 @@ def sample_from_loader(
     controlled=True,
     float_dtype: Optional[torch.dtype] = None,
     discretization_scheme="uniform",
+    exploration=None,
 ):
     batch_list = []
     if len(sample_loader) == 0:
@@ -249,6 +250,7 @@ def sample_from_loader(
                 nfe,
                 only_final_state=True,
                 discretization_scheme=discretization_scheme,
+                exploration=exploration,
             )
         else:
             graph_state = batch
@@ -294,6 +296,7 @@ def populate_buffer_from_loader(
     nfe=1000,
     controlled=True,
     discretization_scheme="uniform",
+    exploration=None,
 ):
     if isinstance(sde, ControlledGraphTorsionSDE):
         float_dtype = torch.float64
@@ -311,6 +314,7 @@ def populate_buffer_from_loader(
         controlled=controlled,
         float_dtype=float_dtype,
         discretization_scheme=discretization_scheme,
+        exploration=exploration,
     )
     if sde.learn_torsions:
         grad_logprob_p1base = grad(sde.noise_schedule.logprob_p1base, 0)

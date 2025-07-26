@@ -80,9 +80,29 @@ def init_distributed_mode(cfg):
             "SLURM_PROCID" in os.environ and os.environ["SLURM_JOB_NAME"] != "bash"
         ):  # Exclude interactive shells
             cfg.rank = int(os.environ["SLURM_PROCID"])
-            cfg.world_size = int(os.environ["SLURM_GPUS_PER_NODE"]) * int(
-                os.environ["SLURM_JOB_NUM_NODES"]
-            )
+            
+            # Check if required SLURM environment variables exist
+            if "SLURM_GPUS_PER_NODE" not in os.environ or "SLURM_JOB_NUM_NODES" not in os.environ:
+                print("Missing SLURM environment variables (SLURM_GPUS_PER_NODE or SLURM_JOB_NUM_NODES)")
+                print("Falling back to non-distributed mode")
+                cfg.distributed = False
+                return
+            
+            try:
+                gpus_per_node = int(os.environ["SLURM_GPUS_PER_NODE"])
+                num_nodes = int(os.environ["SLURM_JOB_NUM_NODES"])
+                cfg.world_size = gpus_per_node * num_nodes
+            except (ValueError, KeyError) as e:
+                print(f"Error parsing SLURM environment variables: {e}")
+                print("Falling back to non-distributed mode")
+                cfg.distributed = False
+                return
+            
+            if torch.cuda.device_count() == 0:
+                print("No CUDA devices available, falling back to non-distributed mode")
+                cfg.distributed = False
+                return
+                
             cfg.gpu = cfg.rank % torch.cuda.device_count()
             cfg.dist_url = get_init_file(cfg.shared_dir).as_uri()
         else:

@@ -97,6 +97,12 @@ def main(cfg):
         print("Initializing model")
         noise_schedule = hydra.utils.instantiate(cfg.noise_schedule)
         energy_model = hydra.utils.instantiate(cfg.energy)
+        
+        # Initialize exploration strategy if provided
+        exploration = None
+        if "exploration" in cfg and cfg.exploration is not None:
+            print("Initializing exploration strategy")
+            exploration = hydra.utils.instantiate(cfg.exploration)
 
         # THIS MUST BE DONE AFTER LOADING THE ENERGY MODEL!!
         if cfg.learn_torsions:
@@ -234,6 +240,7 @@ def main(cfg):
                             nfe=cfg.train_nfe,
                             controlled=False,
                             discretization_scheme=cfg.discretization_scheme,
+                            exploration=exploration,
                         )
                     )
             else:
@@ -261,6 +268,7 @@ def main(cfg):
                             duplicates=cfg.duplicates,
                             nfe=cfg.train_nfe,
                             discretization_scheme=cfg.discretization_scheme,
+                            exploration=exploration,
                         )
                     )
             train_dataloader = buffer.get_data_loader(cfg.num_batches_per_epoch)
@@ -290,6 +298,7 @@ def main(cfg):
                             rank=global_rank,
                             device=device,
                             cfg=cfg,
+                            exploration=exploration,
                         )
                         eval_dict["energy_vis"].save("test_im.png")
                         

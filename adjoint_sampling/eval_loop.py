@@ -66,6 +66,7 @@ def evaluation(
     rank,
     device,
     cfg,
+    exploration=None,
 ):
     states = []
     outputs = []
@@ -73,7 +74,7 @@ def evaluation(
     for batch in eval_sample_loader:
         batch = batch.to(device)
         graph_state, controls = integrate_sde(
-            sde, batch, cfg.eval_nfe, only_final_state=False
+            sde, batch, cfg.eval_nfe, only_final_state=False, exploration=exploration
         )
         output = energy_model(graph_state)
 

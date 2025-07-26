@@ -1,0 +1,7 @@
+# @package _global_
+
+# SomeStepwiseNoise exploration strategy configuration
+# Uses temperature=1 but adds additional noise after step_threshold
+
+_target_: adjoint_sampling.components.exploration.SomeStepwiseNoise
+noise_scale: 0.1         # Amount of additional noise to add

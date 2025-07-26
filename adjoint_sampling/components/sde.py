@@ -54,13 +54,24 @@ def euler_maruyama_step(
     t,
     graph_state,
     dt,
+    exploration=None,
 ):
     # Calculate drift and diffusion terms
     u, f = sde.f(t, graph_state)
-    drift = f * dt
+    
+    # Use exploration strategy if provided, otherwise default behavior
+    if exploration is not None:
+        drift = exploration.compute_drift(f, t, dt)
+    else:
+        drift = f * dt
 
     if hasattr(graph_state, "learn_torsions") and graph_state["learn_torsions"].all():
-        diffusion = sde.g(t) * np.sqrt(dt) * torch.randn_like(graph_state["torsions"])
+        noise = torch.randn_like(graph_state["torsions"])
+        if exploration is not None:
+            diffusion = exploration.compute_diffusion(t, sde, dt, noise)
+        else:
+            diffusion = sde.g(t) * np.sqrt(dt) * noise
+        
         # Update the graph state and substract com
         graph_state_next = graph_state.clone()
         graph_state_next["torsions"] = graph_state_next["torsions"] + drift + diffusion
@@ -79,7 +90,12 @@ def euler_maruyama_step(
             graph_state_next["positions"], graph_state_next["batch"]
         )
     else:
-        diffusion = sde.g(t) * np.sqrt(dt) * torch.randn_like(graph_state["positions"])
+        noise = torch.randn_like(graph_state["positions"])
+        if exploration is not None:
+            diffusion = exploration.compute_diffusion(t, sde, dt, noise)
+        else:
+            diffusion = sde.g(t) * np.sqrt(dt) * noise
+        
         # Update the graph state and substract com
         graph_state_next = graph_add(graph_state, drift + diffusion)
         graph_state_next["positions"] = subtract_com_batch(
@@ -95,6 +111,7 @@ def integrate_sde(
     num_integration_steps,
     only_final_state,
     discretization_scheme="uniform",
+    exploration=None,
 ):
 
     if discretization_scheme == "uniform":
@@ -111,7 +128,7 @@ def integrate_sde(
     controls = []
     for t, t_next in zip(times[:-1], times[1:]):
         dt = t_next - t
-        u, graph_state = euler_maruyama_step(sde, t, graph_state, dt)
+        u, graph_state = euler_maruyama_step(sde, t, graph_state, dt, exploration)
         controls.append(u)
     if only_final_state:
         return graph_state

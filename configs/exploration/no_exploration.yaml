@@ -1,0 +1,6 @@
+# @package _global_
+
+# NoExploration strategy configuration
+# Uses standard temperature=1 and no additional noise
+
+_target_: adjoint_sampling.components.exploration.NoExploration 

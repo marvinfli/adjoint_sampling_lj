@@ -125,4 +125,4 @@ wandb_name: ${hydra:job.name}
 # job_name: ${hydra:job.name}
 config_name: ${hydra:job.config_name}
 # Stores the command line arguments overrides
-override_dirname: ${hydra:job.override_dirname}
+override_dirname: ${hydra:job.override_dirname} 

@@ -5,12 +5,12 @@ defaults:
   - override /energy: lennardjones_energy
   - override /dataset: identical_particles_dataset
   - override /eval_dataset: identical_particles_eval
+  - override /exploration: stepwise_noise  # Use stepwise noise exploration
   # - _self_
   # - override hydra/launcher: submitit_slurm
 
 n_particles: 13
 spatial_dim: 3 # space dimension
-# dof: 1 # number of edges = n_particles * (n_particles - 1) / 2
 
 # Basic settings
 seed: 0                  # Random seed for reproducibility
@@ -74,21 +74,23 @@ controller:
   uniform: False # if true, all particles and edges are the same
   hidden_nf: 128
   agg: "sum"
-  # spatial_dim: 3
 
 noise_schedule:
   _target_: adjoint_sampling.components.noise_schedule.GeometricNoiseSchedule
   sigma_min: 1e-3
   sigma_max: 3.0
+
+# Exploration strategy configuration
+exploration:
+  _target_: adjoint_sampling.components.exploration.SomeStepwiseNoise
+  noise_scale: 0.1
+  step_threshold: 0.5
   
 # custom 
 save_checkpoints: False
 
 # ===== Distributed training settings =====
 shared_dir: ${oc.env:PROJECTROOT}  # Shared directory for distributed training
-# Data duplication strategy:
-# - When True, each GPU sees different data (more diverse training)
-# - When False, each GPU sees copies of the same data (potentially better convergence)
 amortized: True
 
 # ===== Training strategy settings =====
@@ -121,8 +123,6 @@ wandb_project: adjoint_sampling
 wandb_name: ${hydra:job.name}
 
 # variables we can access in our code
-# job_name: 'results'
-# job_name: ${hydra:job.name}
 config_name: ${hydra:job.config_name}
 # Stores the command line arguments overrides
-override_dirname: ${hydra:job.override_dirname}
+override_dirname: ${hydra:job.override_dirname} 
