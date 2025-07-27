@@ -1,16 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=adjoint_no_exploration
-#SBATCH --account=flows
-#SBATCH --partition=gpu
-#SBATCH --qos=flows_high
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32GB
-#SBATCH --time=24:00:00
+#SBATCH --account=sitanc_lab
+#SBATCH --partition=gpu,seas_gpu
+#SBATCH --gres=gpu:nvidia_h100_80gb_hbm3:1
+#SBATCH --mem=100G
+#SBATCH --time=10:00:00
 #SBATCH --output=logs/no_exploration_%j.out
 #SBATCH --error=logs/no_exploration_%j.err
+#SBATCH --requeue
 
 # Create logs directory if it doesn't exist
 mkdir -p logs

@@ -17,7 +17,7 @@ sbatch slurm/run_no_exploration.sh
 - Exploration: None (default behavior)
 - WandB name: `lennard_jones_no_exploration_baseline`
 - Runtime: 24 hours
-- Resources: 1 GPU, 8 CPUs, 32GB RAM
+- Resources: 1 H100 80GB GPU, 8 CPUs, 100GB RAM
 
 ### 2. `run_exploration_sweep.sh`
 Runs a parameter sweep over exploration noise_scale values using SLURM job arrays.
@@ -30,11 +30,11 @@ sbatch slurm/run_exploration_sweep.sh
 **Configuration:**
 - Experiment: `lennard_jones_with_exploration`
 - Exploration: SomeStepwiseNoise with varying `noise_scale`
-- Noise scale values: 0.001, 0.003, 0.01, 0.03, 0.1 (geometric sequence)
+- Noise scale values: 0.001, 0.01, 0.1 (geometric sequence)
 - WandB names: `lennard_jones_exploration_noise_{value}` (e.g., `lennard_jones_exploration_noise_0.001`)
 - Runtime: 48 hours per job
-- Resources: 1 GPU, 8 CPUs, 32GB RAM per job
-- Total jobs: 5 (one for each noise_scale value)
+- Resources: 1 H100 80GB GPU, 8 CPUs, 100GB RAM per job
+- Total jobs: 3 (one for each noise_scale value)
 
 ## Usage
 
@@ -60,7 +60,7 @@ sbatch slurm/run_exploration_sweep.sh
    # For no exploration
    cat logs/no_exploration_<job_id>.out
    
-   # For exploration sweep
+   # For exploration sweep (array_id: 0, 1, or 2)
    cat logs/exploration_sweep_<job_id>_<array_id>.out
    ```
 
@@ -68,12 +68,14 @@ sbatch slurm/run_exploration_sweep.sh
 
 All experiments will log to WandB with semantic names:
 - Baseline: `lennard_jones_no_exploration_baseline`
-- Exploration: `lennard_jones_exploration_noise_0.001`, `lennard_jones_exploration_noise_0.003`, etc.
+- Exploration: `lennard_jones_exploration_noise_0.001`, `lennard_jones_exploration_noise_0.01`, `lennard_jones_exploration_noise_0.1`
 
 ## Notes
 
 - Both scripts assume the `adjoint_sampling` conda environment is available
+- Scripts are configured to use H100 80GB GPUs via `sitanc_lab` account on `gpu,seas_gpu` partitions
 - Logs are saved to the `logs/` directory (created automatically)
 - The exploration sweep uses SLURM job arrays for parallel execution
 - Modify the `noise_scales` array in `run_exploration_sweep.sh` to change parameter values
+- Jobs include `--requeue` for automatic resubmission if preempted
 - Adjust SLURM directives as needed for your cluster configuration 

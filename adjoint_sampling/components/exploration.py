@@ -89,8 +89,7 @@ class NoExploration(BaseExploration):
 
 class SomeStepwiseNoise(BaseExploration):
     """
-    Stepwise noise exploration - temperature=1, but with some noise addition.
-    This is just an example - you can modify the noise schedule as needed.
+    Temperature=1, but with some noise addition.
     """
     
     def __init__(self, noise_scale: float = 0.1):
@@ -109,3 +108,5 @@ class SomeStepwiseNoise(BaseExploration):
         """Return stepwise noise addition."""
         # Add noise_scale when t > step_threshold, otherwise 0
         return self.noise_scale
+
+

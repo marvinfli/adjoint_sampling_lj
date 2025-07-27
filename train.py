@@ -254,7 +254,6 @@ def main(cfg):
                             cfg.batch_size,
                             device,
                             duplicates=cfg.duplicates,
-                            exploration=exploration
                         ),
                     )
                 else:

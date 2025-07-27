@@ -1,17 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=adjoint_exploration_sweep
-#SBATCH --account=flows
-#SBATCH --partition=gpu
-#SBATCH --qos=flows_high
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32GB
-#SBATCH --time=48:00:00
+#SBATCH --account=sitanc_lab
+#SBATCH --partition=gpu,seas_gpu
+#SBATCH --gres=gpu:nvidia_h100_80gb_hbm3:1
+#SBATCH --mem=100G
+#SBATCH --time=10:00:00
 #SBATCH --output=logs/exploration_sweep_%j.out
 #SBATCH --error=logs/exploration_sweep_%j.err
-#SBATCH --array=0-4  # 5 different noise_scale values
+#SBATCH --array=0-2  # 3 different noise_scale values
+#SBATCH --requeue
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
@@ -35,7 +32,7 @@ export CUDA_VISIBLE_DEVICES=0
 export PROJECTROOT=/n/holylabs/LABS/sitanc_lab/Users/mfli/adjoint_sampling_lj
 
 # Define noise_scale values (geometric sequence from 1e-3 to 1e-1)
-noise_scales=(0.001 0.003 0.01 0.03 0.1)
+noise_scales=(0.001 0.01 0.1)
 noise_scale=${noise_scales[$SLURM_ARRAY_TASK_ID]}
 
 echo "Running with noise_scale=${noise_scale}"
