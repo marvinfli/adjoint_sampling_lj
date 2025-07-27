@@ -254,6 +254,7 @@ def main(cfg):
                             cfg.batch_size,
                             device,
                             duplicates=cfg.duplicates,
+                            exploration=exploration
                         ),
                     )
                 else:
@@ -298,7 +299,7 @@ def main(cfg):
                             rank=global_rank,
                             device=device,
                             cfg=cfg,
-                            exploration=exploration,
+                            exploration=None, ## Marvin - Key  here. Don't want to run exploration for evaluation.
                         )
                         eval_dict["energy_vis"].save("test_im.png")
                         

@@ -1,0 +1,4 @@
+# @package _global_
+
+# Null exploration strategy - uses standard SDE integration without modifications
+exploration: null 

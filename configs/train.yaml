@@ -5,6 +5,7 @@ defaults:
   - noise_schedule: geometric
   - dataset: spice_dataset
   - eval_dataset: homogeneous_eval
+  - exploration: null
   - experiment: spice_cartesian
   - override hydra/launcher: submitit_slurm
 

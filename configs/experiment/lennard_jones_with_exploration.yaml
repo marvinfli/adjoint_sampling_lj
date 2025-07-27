@@ -84,7 +84,6 @@ noise_schedule:
 exploration:
   _target_: adjoint_sampling.components.exploration.SomeStepwiseNoise
   noise_scale: 0.1
-  step_threshold: 0.5
   
 # custom 
 save_checkpoints: False
