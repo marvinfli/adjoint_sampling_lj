@@ -4,7 +4,7 @@
 #SBATCH --partition=gpu,seas_gpu
 #SBATCH --gres=gpu:nvidia_h100_80gb_hbm3:1
 #SBATCH --mem=100G
-#SBATCH --time=10:00:00
+#SBATCH --time=23:00:00
 #SBATCH --output=logs/exploration_sweep_new_%j.out
 #SBATCH --error=logs/exploration_sweep_new_%j.err
 #SBATCH --array=0-2  # 3 different start_multiplier values

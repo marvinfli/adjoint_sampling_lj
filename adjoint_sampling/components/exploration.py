@@ -75,7 +75,7 @@ class BaseExploration(ABC):
         noise_multiplier = self.noise_addition(t)
         # Apply epoch-dependent factor (default 1.0)
         epoch_factor = self._get_epoch_factor_tensor(t, noise)
-        return g_t * noise_multiplier * epoch_factor * math.sqrt(dt) * noise
+        return g_t * (1+(noise_multiplier-1) * epoch_factor) * math.sqrt(dt) * noise
 
     def set_epoch(self, epoch: int, end_epoch: int | None = None) -> None:
         """Update internal epoch state for epoch-dependent scheduling.
@@ -167,8 +167,7 @@ class SomeStepwiseNoise(BaseExploration):
         # If no end epoch known, do not scale across epochs
         if self._end_epoch is None or self._end_epoch <= 0:
             return 1.0
-        # Linear decay from epoch_start_factor -> 1.0 across epochs [0, end_epoch]
+        # Linear decay from epoch_start_factor to 1.0 across epochs [0, end_epoch]
         progress = min(max(self._current_epoch / float(self._end_epoch), 0.0), 1.0)
-        return 1.0 + (self.epoch_start_factor - 1.0) * (1.0 - progress)
-
+        return self.epoch_start_factor * (1.0 - progress)        
 

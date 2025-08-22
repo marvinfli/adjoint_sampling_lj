@@ -67,7 +67,8 @@ exploration:
   start_multiplier: 2.0
   end_multiplier: 1.0
   decay_power: 1.0
-  end_epoch: ${num_epochs}
+  end_epoch: 1_000
+  epoch_start_factor: 1.0
 # custom
 save_checkpoints: False
 # ===== Distributed training settings =====
