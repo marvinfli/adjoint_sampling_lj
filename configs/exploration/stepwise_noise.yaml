@@ -1,7 +1,10 @@
 # @package _global_
 
 # SomeStepwiseNoise exploration strategy configuration
-# Uses temperature=1 but adds additional noise after step_threshold
+# Uses temperature=1 and applies a multiplicative noise multiplier decaying from start to end
 
 _target_: adjoint_sampling.components.exploration.SomeStepwiseNoise
-noise_scale: 0.1         # Amount of additional noise to add
+# Deprecated alias retained: noise_scale -> start_multiplier
+start_multiplier: 2.0     # Multiplier at t=0
+end_multiplier: 1.0       # Multiplier at t=1
+decay_power: 1.0          # 1.0 linear; >1 faster drop early; <1 slower early

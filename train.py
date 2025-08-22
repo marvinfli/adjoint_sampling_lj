@@ -212,6 +212,10 @@ def main(cfg):
         print(f"Starting from {cfg.start_epoch}/{cfg.num_epochs} epochs")
         pbar = tqdm(range(start_epoch, cfg.num_epochs))
         for epoch in pbar:
+            # Update exploration epoch-dependent scheduling if enabled
+            if exploration is not None and hasattr(exploration, "set_epoch"):
+                # Default end_epoch to cfg.num_epochs (Hydra value) if exploration has None
+                exploration.set_epoch(epoch=epoch, end_epoch=(cfg.num_epochs if getattr(exploration, "_end_epoch", None) in (None, 0) else None))
             if (
                 epoch == start_epoch
             ):  # should we reinitialize buffer randomly like this if resuming?
@@ -298,7 +302,7 @@ def main(cfg):
                             rank=global_rank,
                             device=device,
                             cfg=cfg,
-                            exploration=None, ## Marvin - Key  here. Don't want to run exploration for evaluation.
+                            exploration=None, ## Marvin - Key here. Don't want to run exploration for evaluation.
                         )
                         eval_dict["energy_vis"].save("test_im.png")
                         
